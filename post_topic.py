@@ -6,8 +6,8 @@ import requests
 from datetime import datetime
 
 # ---------- الإعدادات من متغيرات البيئة ----------
-BOT_TOKEN = os.environ.get("5074251178:AAFoUw3Dr59F6XcWzDGeW0T-j5hAI5deRTY")
-CHANNEL_ID = os.environ.get("@space1828")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
 if not BOT_TOKEN or not CHANNEL_ID:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_ID كمتغيرات بيئة")

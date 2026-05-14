@@ -33,65 +33,88 @@ def clean_text(text):
     text = re.sub(r' +', ' ', text).strip()
     return text
 
-# ---------- كلمات البحث العشوائية للأحاديث ----------
-HADITH_SEARCH_TERMS = [
+# ---------- كلمات البحث ----------
+HADITH_TERMS = [
     "الصلاة", "الصيام", "الزكاة", "الحج", "الإيمان", "الإحسان",
     "بر الوالدين", "صلة الرحم", "الصدق", "الأمانة", "التقوى",
     "الجنة", "النار", "الذكر", "الدعاء", "الاستغفار", "التوبة",
-    "العلم", "الرفق", "الحياء", "حسن الخلق", "الجار", "اليتيم"
+    "العلم", "الرفق", "الحياء", "حسن الخلق"
 ]
 
-FIQH_SEARCH_TERMS = [
-    "حكم", "واجب", "حرام", "حلال", "مستحب", "مكروه",
-    "طهارة", "صلاة", "صيام", "زكاة", "حج", "نكاح", "طلاق",
-    "بيع", "ربا", "ميراث", "حد", "قصاص", "جهاد"
+FIQH_TERMS = [
+    "حكم الصلاة", "حكم الصيام", "الطهارة", "الوضوء", "الزكاة",
+    "الحج", "النكاح", "الطلاق", "البيع", "الميراث"
 ]
 
-AQEEDA_SEARCH_TERMS = [
-    "توحيد", "أسماء الله", "صفات الله", "الإيمان", "القدر",
-    "الملائكة", "الكتب", "الرسل", "اليوم الآخر", "الجنة والنار",
-    "الشرك", "الكفر", "النفاق", "البدعة", "السنة"
+AQEEDA_TERMS = [
+    "التوحيد", "أسماء الله", "صفات الله", "الإيمان بالله",
+    "الملائكة", "الكتب", "الرسل", "اليوم الآخر", "القدر"
 ]
 
 # ---------- دوال جلب المحتوى ----------
-def fetch_from_dorar(search_term, hadith_only=False):
+def fetch_from_dorar(search_term):
     """جلب نتائج من API الدرر السنية"""
     url = f"https://dorar.net/dorar_api.json?skey={search_term}"
     
+    print(f"🔍 جاري البحث عن: {search_term}")
+    print(f"🔗 الرابط: {url}")
+    
     try:
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+        resp = requests.get(url, timeout=20)
+        print(f"📊 حالة الاستجابة: {resp.status_code}")
         
-        if "ahadith" in data and data["ahadith"] and len(data["ahadith"]) > 0:
-            # اختيار حديث عشوائي من النتائج
-            hadith = random.choice(data["ahadith"])
-            text = hadith.get("hadith", "").strip()
-            sharh = hadith.get("sharh", "").strip()
-            
-            if not text:
-                raise Exception("الحديث فارغ")
-            
-            return clean_text(text), clean_text(sharh)
+        if resp.status_code != 200:
+            raise Exception(f"خطأ في الاستجابة: {resp.status_code}")
+        
+        # طباعة أول 500 حرف من الاستجابة للتشخيص
+        print(f"📝 أول 500 حرف من الاستجابة:")
+        print(resp.text[:500])
+        print("---")
+        
+        data = resp.json()
+        print(f"📦 نوع البيانات: {type(data)}")
+        print(f"📦 المفاتيح: {list(data.keys()) if isinstance(data, dict) else 'ليست dict'}")
+        
+        # التعامل مع الاستجابة حسب شكلها
+        if isinstance(data, dict):
+            if "ahadith" in data and data["ahadith"]:
+                hadith_list = data["ahadith"]
+                print(f"✅ عدد الأحاديث: {len(hadith_list)}")
+                
+                # اختيار حديث عشوائي
+                hadith = random.choice(hadith_list)
+                print(f"📋 المفاتيح في الحديث: {list(hadith.keys())}")
+                
+                # استخراج النص والشرح
+                text = hadith.get("hadith", "") or hadith.get("th", "") or ""
+                sharh = hadith.get("sharh", "") or hadith.get("sh", "") or ""
+                
+                if text:
+                    return clean_text(text), clean_text(sharh)
+                else:
+                    raise Exception("الحديث لا يحتوي على نص")
+            else:
+                # ربما البيانات مباشرة
+                print("⚠️ لا يوجد مفتاح 'ahadith'")
+                raise Exception(f"شكل البيانات غير متوقع. المفاتيح: {list(data.keys())}")
         else:
-            raise Exception("لا توجد نتائج")
+            raise Exception(f"نوع البيانات غير متوقع: {type(data)}")
             
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"خطأ في الاتصال: {e}")
     except Exception as e:
         raise Exception(f"فشل جلب المحتوى: {e}")
 
 def fetch_hadith():
-    """جلب حديث عشوائي"""
-    term = random.choice(HADITH_SEARCH_TERMS)
+    term = random.choice(HADITH_TERMS)
     return fetch_from_dorar(term)
 
 def fetch_fiqh():
-    """جلب مسألة فقهية"""
-    term = random.choice(FIQH_SEARCH_TERMS)
+    term = random.choice(FIQH_TERMS)
     return fetch_from_dorar(term)
 
 def fetch_aqeeda():
-    """جلب موضوع عقيدة"""
-    term = random.choice(AQEEDA_SEARCH_TERMS)
+    term = random.choice(AQEEDA_TERMS)
     return fetch_from_dorar(term)
 
 # ---------- تنسيق الرسائل ----------
@@ -140,21 +163,21 @@ def main():
 
     try:
         if topic_type == "hadith":
-            hadith_text, sharh = fetch_hadith()
-            msg = format_hadith_message(hadith_text, sharh)
+            text, sharh = fetch_hadith()
+            msg = format_hadith_message(text, sharh)
         elif topic_type == "fiqh":
-            question, answer = fetch_fiqh()
-            msg = format_fiqh_message(question, answer)
+            text, sharh = fetch_fiqh()
+            msg = format_fiqh_message(text, sharh)
         elif topic_type == "aqeeda":
-            title, content = fetch_aqeeda()
-            msg = format_aqeeda_message(title, content)
+            text, sharh = fetch_aqeeda()
+            msg = format_aqeeda_message(text, sharh)
         else:
             print("❌ نوع غير معروف")
             sys.exit(1)
 
-        print("--- الرسالة ---")
+        print("\n" + "="*40)
         print(msg)
-        print("---------------")
+        print("="*40 + "\n")
         
         send_message(msg)
 

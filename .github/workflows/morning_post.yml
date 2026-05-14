@@ -1,24 +1,18 @@
-name: نشر حديث الصباح
-
+name: حديث الصباح
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 4 * * *'   # 7:00 صباحًا بتوقيت مكة
   workflow_dispatch:
-
 jobs:
   post:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: تثبيت Python والمتطلبات
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
       - run: pip install -r requirements.txt
-      
-      - name: تشغيل البوت - حديث
+      - name: تشغيل حديث الصباح
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}

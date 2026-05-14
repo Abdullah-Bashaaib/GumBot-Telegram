@@ -3,8 +3,9 @@ import sys
 import re
 import html
 import random
-import requests
 import json
+import requests
+import unicodedata
 
 # ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -16,26 +17,50 @@ if not BOT_TOKEN or not CHANNEL_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# ---------- دالة تنظيف النص ----------
+def clean_arabic(text):
+    """
+    تنظيف النص العربي من علامات Unicode الغريبة التي قد تسبب تقطيع الأحرف.
+    - إزالة الرموز غير المرئية (مثل U+200B, U+200C, U+200D, U+FEFF)
+    - تطبيع النص لضمان ترابط الحروف
+    """
+    if not text:
+        return ""
+
+    # إزالة الرموز الصفرية العرض (zero-width space) وغيرها
+    text = re.sub(r'[\u200b\u200c\u200d\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069\uFEFF]', '', text)
+
+    # تطبيع Unicode إلى شكل NFC (التركيب المسبق) لضمان ترابط الحروف العربية
+    text = unicodedata.normalize('NFC', text)
+
+    # إزالة المسافات المتعددة
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
+
 # ---------- 1. جلب حديث عشوائي من ummahapi.com ----------
 def fetch_hadith():
-    """جلب حديث عشوائي بالعربية من ummahapi"""
+    """جلب حديث عشوائي بالعربية من ummahapi وتنظيفه"""
     print("📜 جلب حديث عشوائي من ummahapi...")
     resp = requests.get("https://ummahapi.com/api/hadith/random", timeout=15)
     resp.raise_for_status()
     data = resp.json()
-    
+
     if not data.get("success"):
         raise Exception("API لم يُرجع نجاحاً")
-    
+
     hadith_data = data["data"]
     arabic_text = hadith_data.get("arabic", "").strip()
     collection = hadith_data.get("collection_name", "")
     number = hadith_data.get("hadithnumber", "")
     grade = hadith_data.get("grade", "")
-    
+
     if not arabic_text:
         raise Exception("نص الحديث فارغ")
-    
+
+    # تنظيف النص العربي
+    arabic_text = clean_arabic(arabic_text)
+
     return arabic_text, collection, number, grade
 
 # ---------- 2. جلب مسألة فقهية (ما زلنا نستخدم الدرر) ----------
@@ -63,14 +88,14 @@ def fetch_fiqh():
         # تنظيف بسيط
         text = re.sub(r'https?://\S+', '', text)
         text = re.sub(r'الدرر السنية|dorar\.net', '', text, flags=re.IGNORECASE)
-        text = text.strip()
+        text = clean_arabic(text)
         if not text:
             raise Exception("نص فارغ")
         # محاولة فصل سؤال وجواب
         q = re.search(r'السؤال\s*:?\s*(.*?)(?:الجواب|$)', text, re.DOTALL)
         a = re.search(r'الجواب\s*:?\s*(.*)', text, re.DOTALL)
         if q and a:
-            return q.group(1).strip(), a.group(1).strip()
+            return clean_arabic(q.group(1).strip()), clean_arabic(a.group(1).strip())
         return text, ""
     except Exception as e:
         print(f"⚠️ فشل جلب الفقه: {e}")
@@ -100,7 +125,7 @@ def fetch_aqeeda():
         text = chosen.get("th") or chosen.get("hadith", "")
         text = re.sub(r'https?://\S+', '', text)
         text = re.sub(r'الدرر السنية|dorar\.net', '', text, flags=re.IGNORECASE)
-        text = text.strip()
+        text = clean_arabic(text)
         return text, ""
     except Exception as e:
         print(f"⚠️ فشل جلب العقيدة: {e}")

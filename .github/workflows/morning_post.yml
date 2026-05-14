@@ -17,6 +17,6 @@ jobs:
       - run: pip install -r requirements.txt
       - name: تشغيل البوت - حديث
         env:
-          BOT_TOKEN: ${{ 5074251178:AAFoUw3Dr59F6XcWzDGeW0T-j5hAI5deRTY }}
-          CHANNEL_ID: ${{ @space1828 }}
+         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
         run: python post_topic.py hadith

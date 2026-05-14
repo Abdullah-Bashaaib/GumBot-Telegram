@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import re
@@ -17,60 +18,111 @@ if not BOT_TOKEN or not CHANNEL_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# ---------- دالة تنظيف النص ----------
+# ---------- قواميس الترجمة ----------
+COLLECTION_NAMES_AR = {
+    "sahih bukhari": "صحيح البخاري",
+    "sahih muslim": "صحيح مسلم",
+    "jami at-tirmidhi": "جامع الترمذي",
+    "sunan abi dawud": "سنن أبي داود",
+    "sunan an-nasa'i": "سنن النسائي",
+    "sunan ibn majah": "سنن ابن ماجه",
+    "muwatta malik": "موطأ مالك",
+    "musnad ahmad": "مسند أحمد",
+    "riyad as-salihin": "رياض الصالحين",
+    "al-adab al-mufrad": "الأدب المفرد",
+    "sahih al-bukhari": "صحيح البخاري",
+    "sahih muslims": "صحيح مسلم",
+    "bulugh al-maram": "بلوغ المرام",
+    "shama'il muhammadiyyah": "الشمائل المحمدية",
+    "forty hadith an-nawawi": "الأربعون النووية",
+    "forty hadith nawawi": "الأربعون النووية",
+    "sunan ad-darimi": "سنن الدارمي",
+}
+
+GRADE_AR = {
+    "sahih": "صحيح",
+    "hasan": "حسن",
+    "daif": "ضعيف",
+    "mauquf sahih": "صحيح موقوف",
+    "hasan sahih": "حسن صحيح",
+    "sahih hasan": "صحيح حسن",
+    "maudhu": "موضوع",
+    "munkar": "منكر",
+}
+
+# الأحكام المقبولة (صحيحة أو حسنة)
+ACCEPTED_GRADES = ["sahih", "hasan", "sahih hasan", "hasan sahih", "mauquf sahih"]
+
+def translate_collection(name_en):
+    if not name_en:
+        return ""
+    return COLLECTION_NAMES_AR.get(name_en.lower().strip(), name_en)
+
+def translate_grade(grade_en):
+    if not grade_en:
+        return ""
+    return GRADE_AR.get(grade_en.lower().strip(), grade_en)
+
+def is_accepted_grade(grade_en):
+    """يتحقق مما إذا كان الحكم من الأحكام المقبولة"""
+    if not grade_en:
+        return False
+    return grade_en.lower().strip() in ACCEPTED_GRADES
+
+# ---------- تنظيف النص العربي ----------
 def clean_arabic(text):
-    """
-    تنظيف النص العربي من علامات Unicode الغريبة التي قد تسبب تقطيع الأحرف.
-    - إزالة الرموز غير المرئية (مثل U+200B, U+200C, U+200D, U+FEFF)
-    - تطبيع النص لضمان ترابط الحروف
-    """
     if not text:
         return ""
-
-    # إزالة الرموز الصفرية العرض (zero-width space) وغيرها
     text = re.sub(r'[\u200b\u200c\u200d\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069\uFEFF]', '', text)
-
-    # تطبيع Unicode إلى شكل NFC (التركيب المسبق) لضمان ترابط الحروف العربية
     text = unicodedata.normalize('NFC', text)
-
-    # إزالة المسافات المتعددة
     text = re.sub(r'\s+', ' ', text).strip()
-
     return text
 
-# ---------- 1. جلب حديث عشوائي من ummahapi.com ----------
+# ---------- 1. جلب حديث عشوائي صحيح أو حسن ----------
 def fetch_hadith():
-    """جلب حديث عشوائي بالعربية من ummahapi وتنظيفه"""
-    print("📜 جلب حديث عشوائي من ummahapi...")
-    resp = requests.get("https://ummahapi.com/api/hadith/random", timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
+    """يحاول حتى يجد حديثًا صحيحًا أو حسنًا"""
+    max_attempts = 10  # عدد المحاولات القصوى لتجنب التكرار اللانهائي
+    for attempt in range(1, max_attempts + 1):
+        print(f"📜 محاولة {attempt} لجلب حديث...")
+        resp = requests.get("https://ummahapi.com/api/hadith/random", timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
 
-    if not data.get("success"):
-        raise Exception("API لم يُرجع نجاحاً")
+        if not data.get("success"):
+            print("   ⚠️ API لم يُرجع نجاحًا، إعادة المحاولة...")
+            continue
 
-    hadith_data = data["data"]
-    arabic_text = hadith_data.get("arabic", "").strip()
-    collection = hadith_data.get("collection_name", "")
-    number = hadith_data.get("hadithnumber", "")
-    grade = hadith_data.get("grade", "")
+        hadith_data = data["data"]
+        arabic_text = hadith_data.get("arabic", "").strip()
+        collection = hadith_data.get("collection_name", "")
+        number = hadith_data.get("hadithnumber", "")
+        grade = hadith_data.get("grade", "")
 
-    if not arabic_text:
-        raise Exception("نص الحديث فارغ")
+        if not arabic_text:
+            print("   ⚠️ نص الحديث فارغ، إعادة المحاولة...")
+            continue
 
-    # تنظيف النص العربي
-    arabic_text = clean_arabic(arabic_text)
+        if not is_accepted_grade(grade):
+            grade_ar = translate_grade(grade) or grade
+            print(f"   ⚠️ الحديث {grade_ar} (غير مقبول)، إعادة المحاولة...")
+            continue
 
-    return arabic_text, collection, number, grade
+        # حديث مقبول
+        arabic_text = clean_arabic(arabic_text)
+        collection_ar = translate_collection(collection)
+        grade_ar = translate_grade(grade)
+        print(f"   ✅ حديث مقبول: {grade_ar}")
+        return arabic_text, collection_ar, number, grade_ar
 
-# ---------- 2. جلب مسألة فقهية (ما زلنا نستخدم الدرر) ----------
+    raise Exception("لم نعثر على حديث صحيح/حسن بعد عدة محاولات")
+
+# ---------- 2. جلب مسألة فقهية ----------
 FIQH_TERMS = [
     "حكم الصلاة", "حكم الصيام", "الطهارة", "الوضوء", "الزكاة",
     "الحج", "النكاح", "الطلاق", "البيع", "الميراث"
 ]
 
 def fetch_fiqh():
-    """جلب مسألة فقهية من موقع الدرر"""
     term = random.choice(FIQH_TERMS)
     print(f"📚 [فقه] البحث عن: {term}")
     try:
@@ -85,13 +137,11 @@ def fetch_fiqh():
             raise Exception("لا توجد نتائج")
         chosen = random.choice(ahadith)
         text = chosen.get("th") or chosen.get("hadith", "")
-        # تنظيف بسيط
         text = re.sub(r'https?://\S+', '', text)
         text = re.sub(r'الدرر السنية|dorar\.net', '', text, flags=re.IGNORECASE)
         text = clean_arabic(text)
         if not text:
             raise Exception("نص فارغ")
-        # محاولة فصل سؤال وجواب
         q = re.search(r'السؤال\s*:?\s*(.*?)(?:الجواب|$)', text, re.DOTALL)
         a = re.search(r'الجواب\s*:?\s*(.*)', text, re.DOTALL)
         if q and a:
@@ -101,14 +151,13 @@ def fetch_fiqh():
         print(f"⚠️ فشل جلب الفقه: {e}")
         return "مسألة فقهية", "لم نتمكن من جلب المحتوى حالياً"
 
-# ---------- 3. جلب موضوع عقيدة (مؤقتاً بنفس الطريقة) ----------
+# ---------- 3. جلب موضوع عقيدة ----------
 AQEEDA_TERMS = [
     "التوحيد", "أسماء الله", "صفات الله", "الإيمان", "الملائكة",
     "الكتب", "الرسل", "اليوم الآخر", "القدر"
 ]
 
 def fetch_aqeeda():
-    """جلب موضوع عقيدة"""
     term = random.choice(AQEEDA_TERMS)
     print(f"🕌 [عقيدة] البحث عن: {term}")
     try:
@@ -137,13 +186,13 @@ def format_hadith(arabic_text, collection, number, grade):
     msg += f"{html.escape(arabic_text)}\n\n"
     info = []
     if collection:
-        info.append(f"📖 المصدر: {html.escape(collection)}")
+        info.append(f"📖 <b>المصدر:</b> {html.escape(collection)}")
     if number:
-        info.append(f"🔢 رقم الحديث: {number}")
+        info.append(f"🔢 <b>رقم الحديث:</b> {number}")
     if info:
         msg += " | ".join(info) + "\n"
     if grade:
-        msg += f"✅ الحكم: {html.escape(grade)}"
+        msg += f"✅ <b>الحكم:</b> {html.escape(grade)}"
     return msg
 
 def format_fiqh(question, answer):

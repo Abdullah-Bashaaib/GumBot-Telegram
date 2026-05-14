@@ -4,6 +4,7 @@ import re
 import html
 import requests
 import random
+from bs4 import BeautifulSoup
 
 # ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -52,56 +53,69 @@ AQEEDA_TERMS = [
 ]
 
 # ---------- دوال جلب المحتوى ----------
+def extract_from_html(html_content):
+    """استخراج الحديث من HTML"""
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    # البحث عن div الحديث
+    hadith_div = soup.find('div', class_='hadith')
+    if not hadith_div:
+        raise Exception("لم يتم العثور على حديث في HTML")
+    
+    # استخراج النص
+    hadith_text = hadith_div.get_text(separator=' ', strip=True)
+    # إزالة الترقيم في البداية مثل "1 -"
+    hadith_text = re.sub(r'^\d+\s*-\s*', '', hadith_text).strip()
+    
+    # محاولة استخراج الشرح (قد لا يكون موجوداً)
+    sharh = ""
+    info_div = soup.find('div', class_='hadith-info')
+    if info_div:
+        sharh = info_div.get_text(separator=' ', strip=True)
+        # تنظيف الشرح
+        sharh = re.sub(r'(الراوي|المحدث|المصدر|الصفحة|الرقم|خلاصة الحكم)\s*:', '', sharh)
+        sharh = sharh.strip()
+    
+    return hadith_text, sharh
+
 def fetch_from_dorar(search_term):
     """جلب نتائج من API الدرر السنية"""
     url = f"https://dorar.net/dorar_api.json?skey={search_term}"
     
     print(f"🔍 جاري البحث عن: {search_term}")
-    print(f"🔗 الرابط: {url}")
     
     try:
         resp = requests.get(url, timeout=20)
-        print(f"📊 حالة الاستجابة: {resp.status_code}")
-        
-        if resp.status_code != 200:
-            raise Exception(f"خطأ في الاستجابة: {resp.status_code}")
-        
-        # طباعة أول 500 حرف من الاستجابة للتشخيص
-        print(f"📝 أول 500 حرف من الاستجابة:")
-        print(resp.text[:500])
-        print("---")
-        
+        resp.raise_for_status()
         data = resp.json()
-        print(f"📦 نوع البيانات: {type(data)}")
-        print(f"📦 المفاتيح: {list(data.keys()) if isinstance(data, dict) else 'ليست dict'}")
         
-        # التعامل مع الاستجابة حسب شكلها
-        if isinstance(data, dict):
-            if "ahadith" in data and data["ahadith"]:
-                hadith_list = data["ahadith"]
-                print(f"✅ عدد الأحاديث: {len(hadith_list)}")
-                
-                # اختيار حديث عشوائي
-                hadith = random.choice(hadith_list)
-                print(f"📋 المفاتيح في الحديث: {list(hadith.keys())}")
-                
-                # استخراج النص والشرح
-                text = hadith.get("hadith", "") or hadith.get("th", "") or ""
-                sharh = hadith.get("sharh", "") or hadith.get("sh", "") or ""
-                
-                if text:
-                    return clean_text(text), clean_text(sharh)
-                else:
+        ahadith = data.get("ahadith", {})
+        
+        # التعامل مع الحالات المختلفة
+        if isinstance(ahadith, list):
+            # قائمة أحاديث
+            if len(ahadith) == 0:
+                raise Exception("لا توجد نتائج")
+            chosen = random.choice(ahadith)
+            # إذا كان العنصر dict وليس HTML
+            if isinstance(chosen, dict):
+                text = chosen.get("hadith", "") or chosen.get("th", "")
+                sharh = chosen.get("sharh", "") or chosen.get("sh", "")
+                if not text:
                     raise Exception("الحديث لا يحتوي على نص")
+                return clean_text(text), clean_text(sharh)
             else:
-                # ربما البيانات مباشرة
-                print("⚠️ لا يوجد مفتاح 'ahadith'")
-                raise Exception(f"شكل البيانات غير متوقع. المفاتيح: {list(data.keys())}")
+                # عنصر نصي ربما HTML
+                return extract_from_html(str(chosen))
+        elif isinstance(ahadith, dict):
+            # حالة وجود result (HTML)
+            result_html = ahadith.get("result", "")
+            if not result_html:
+                raise Exception("لا توجد نتائج")
+            return extract_from_html(result_html)
         else:
-            raise Exception(f"نوع البيانات غير متوقع: {type(data)}")
+            raise Exception("شكل بيانات غير معروف")
             
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"خطأ في الاتصال: {e}")
     except Exception as e:
         raise Exception(f"فشل جلب المحتوى: {e}")
 

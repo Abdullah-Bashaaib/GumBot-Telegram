@@ -1,10 +1,8 @@
-name: نشر مسألة فقهية ظهراً
-
+name: حديث الظهيرة
 on:
   schedule:
-    - cron: '0 9 * * *'   # 12:00 PM Mecca time
+    - cron: '0 9 * * *'   # 12:00 ظهرًا بتوقيت مكة
   workflow_dispatch:
-
 jobs:
   post:
     runs-on: ubuntu-latest
@@ -14,8 +12,8 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install -r requirements.txt
-      - name: تشغيل البوت - فقه
+      - name: تشغيل حديث الظهيرة
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python post_topic.py fiqh
+        run: python post_topic.py hadith

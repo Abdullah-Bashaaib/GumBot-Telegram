@@ -3,7 +3,6 @@ import sys
 import re
 import html
 import requests
-import random
 from bs4 import BeautifulSoup
 
 # ---------- الإعدادات ----------
@@ -16,129 +15,176 @@ if not BOT_TOKEN or not CHANNEL_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# ---------- دالة تنظيف النص ----------
+# ---------- دوال مساعدة ----------
 def clean_text(text):
+    """تنظيف النص من الروابط وبقايا HTML"""
     if not text:
         return ""
-    # إزالة وسوم HTML
     text = re.sub(r'<[^>]+>', '', text)
-    # إزالة الروابط
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
-    # إزالة إشارات المصدر
     text = re.sub(r'الدرر السنية', '', text, flags=re.IGNORECASE)
     text = re.sub(r'dorar\.net', '', text, flags=re.IGNORECASE)
     text = re.sub(r'^(?:المصدر|الرابط|مصدر|رابط)\s*:?\s*.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
-    # تنظيف الفراغات
     text = re.sub(r'\n\s*\n', '\n', text)
     text = re.sub(r' +', ' ', text).strip()
     return text
 
-# ---------- كلمات البحث ----------
-HADITH_TERMS = [
-    "الصلاة", "الصيام", "الزكاة", "الحج", "الإيمان", "الإحسان",
-    "بر الوالدين", "صلة الرحم", "الصدق", "الأمانة", "التقوى",
-    "الجنة", "النار", "الذكر", "الدعاء", "الاستغفار", "التوبة",
-    "العلم", "الرفق", "الحياء", "حسن الخلق"
-]
+def get_random_page(url):
+    """جلب صفحة عشوائية واتباع التوجيهات"""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=20, allow_redirects=True)
+        resp.raise_for_status()
+        return resp.text
+    except Exception as e:
+        raise Exception(f"فشل تحميل الصفحة: {e}")
 
-FIQH_TERMS = [
-    "حكم الصلاة", "حكم الصيام", "الطهارة", "الوضوء", "الزكاة",
-    "الحج", "النكاح", "الطلاق", "البيع", "الميراث"
-]
-
-AQEEDA_TERMS = [
-    "التوحيد", "أسماء الله", "صفات الله", "الإيمان بالله",
-    "الملائكة", "الكتب", "الرسل", "اليوم الآخر", "القدر"
-]
-
-# ---------- دوال جلب المحتوى ----------
-def extract_from_html(html_content):
-    """استخراج الحديث من HTML"""
+# ---------- استخراج الحديث ----------
+def extract_hadith_data(html_content):
+    """استخراج الحديث والمعلومات والشرح من صفحة حديث"""
     soup = BeautifulSoup(html_content, 'html.parser')
     
-    # البحث عن div الحديث
-    hadith_div = soup.find('div', class_='hadith')
+    # الحديث: غالباً داخل عنصر بكلاس 'hadith' أو 'hadith-text'
+    hadith_div = soup.find('div', class_='hadith') or soup.find('div', class_='hadith-text')
     if not hadith_div:
-        raise Exception("لم يتم العثور على حديث في HTML")
+        # محاولة بديلة
+        hadith_div = soup.find('div', class_='text-center')  # بعض الصفحات
+    if not hadith_div:
+        raise Exception("لم يتم العثور على نص الحديث")
     
-    # استخراج النص
     hadith_text = hadith_div.get_text(separator=' ', strip=True)
-    # إزالة الترقيم في البداية مثل "1 -"
-    hadith_text = re.sub(r'^\d+\s*-\s*', '', hadith_text).strip()
+    hadith_text = re.sub(r'^\d+\s*-\s*', '', hadith_text).strip()  # إزالة الترقيم
+    hadith_text = clean_text(hadith_text)
     
-    # محاولة استخراج الشرح (قد لا يكون موجوداً)
-    sharh = ""
+    # معلومات الراوي والمحدث
     info_div = soup.find('div', class_='hadith-info')
+    info_text = ""
     if info_div:
-        sharh = info_div.get_text(separator=' ', strip=True)
-        # تنظيف الشرح
-        sharh = re.sub(r'(الراوي|المحدث|المصدر|الصفحة|الرقم|خلاصة الحكم)\s*:', '', sharh)
-        sharh = sharh.strip()
+        info_text = info_div.get_text(separator=' ', strip=True)
+    else:
+        # محاولة من جداول أخرى
+        rows = soup.select('table tr')
+        for row in rows:
+            cells = row.find_all('td')
+            if len(cells) >= 2:
+                key = cells[0].get_text(strip=True)
+                value = cells[1].get_text(strip=True)
+                if key in ['الراوي', 'المحدث', 'المصدر', 'الصفحة أو الرقم', 'خلاصة الحكم']:
+                    info_text += f"{key}: {value} | "
+        info_text = info_text.rstrip(' | ')
+    info_text = clean_text(info_text)
     
-    return hadith_text, sharh
+    # استخراج الحكم والراوي والمحدث بشكل منفصل لتنسيق أفضل
+    rawi = ""
+    muhaddith = ""
+    masdar = ""
+    page = ""
+    hukm = ""
+    
+    # محاولة استخراج كل معلومة على حدة
+    if info_div:
+        for span in info_div.find_all('span'):
+            label = span.get('class', '')
+            if 'info-subtitle' in span.get('class', []):
+                label_text = span.get_text(strip=True)
+                next_span = span.find_next('span')
+                value = next_span.get_text(strip=True) if next_span else ""
+                if 'الراوي' in label_text:
+                    rawi = value
+                elif 'المحدث' in label_text:
+                    muhaddith = value
+                elif 'المصدر' in label_text:
+                    masdar = value
+                elif 'الصفحة' in label_text:
+                    page = value
+                elif 'خلاصة' in label_text:
+                    hukm = value
+    
+    # إذا لم نستطع استخراجها، نحاول من النص الكامل
+    if not rawi and info_text:
+        match = re.search(r'الراوي:\s*([^|]+)', info_text)
+        if match: rawi = match.group(1).strip()
+        match = re.search(r'المحدث:\s*([^|]+)', info_text)
+        if match: muhaddith = match.group(1).strip()
+        match = re.search(r'المصدر:\s*([^|]+)', info_text)
+        if match: masdar = match.group(1).strip()
+        match = re.search(r'الصفحة أو الرقم:\s*([^|]+)', info_text)
+        if match: page = match.group(1).strip()
+        match = re.search(r'خلاصة الحكم:\s*([^|]+)', info_text)
+        if match: hukm = match.group(1).strip()
+    
+    # الشرح
+    sharh_div = soup.find('div', class_='sharh') or soup.find('div', id='sharh')
+    if not sharh_div:
+        # قد يكون في قسم منفصل
+        sharh_div = soup.find('div', class_='card-body') or soup.find('div', class_='content')
+    sharh_text = ""
+    if sharh_div:
+        sharh_text = sharh_div.get_text(separator='\n', strip=True)
+        # تنظيف إضافي
+        sharh_text = re.sub(r'\n\s*\n', '\n', sharh_text).strip()
+    sharh_text = clean_text(sharh_text)
+    
+    return hadith_text, rawi, muhaddith, masdar, page, hukm, sharh_text
 
-def fetch_from_dorar(search_term):
-    """جلب نتائج من API الدرر السنية"""
-    url = f"https://dorar.net/dorar_api.json?skey={search_term}"
+# ---------- تنسيق الرسالة كما طلب المستخدم ----------
+def format_hadith_message(hadith_text, rawi, muhaddith, masdar, page, hukm, sharh_text):
+    msg = "📜 <b>حديث شريف:</b>\n\n"
+    msg += f"قال رسول الله صلى الله عليه وسلم: {html.escape(hadith_text)}\n\n"
     
-    print(f"🔍 جاري البحث عن: {search_term}")
+    # سطر المعلومات
+    info_parts = []
+    if hukm:
+        info_parts.append(f"خلاصة حكم المحدث: [{html.escape(hukm)}]")
+    rawi_line = []
+    if rawi:
+        rawi_line.append(f"الراوي: {html.escape(rawi)}")
+    if muhaddith:
+        rawi_line.append(f"المحدث: {html.escape(muhaddith)}")
+    if masdar:
+        rawi_line.append(f"المصدر: {html.escape(masdar)}")
+    if page:
+        rawi_line.append(f"الصفحة أو الرقم: {html.escape(page)}")
+    if rawi_line:
+        info_parts.append(" | ".join(rawi_line))
+    if info_parts:
+        msg += "\n".join(info_parts) + "\n"
     
-    try:
-        resp = requests.get(url, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        
-        ahadith = data.get("ahadith", {})
-        
-        # التعامل مع الحالات المختلفة
-        if isinstance(ahadith, list):
-            # قائمة أحاديث
-            if len(ahadith) == 0:
-                raise Exception("لا توجد نتائج")
-            chosen = random.choice(ahadith)
-            # إذا كان العنصر dict وليس HTML
-            if isinstance(chosen, dict):
-                text = chosen.get("hadith", "") or chosen.get("th", "")
-                sharh = chosen.get("sharh", "") or chosen.get("sh", "")
-                if not text:
-                    raise Exception("الحديث لا يحتوي على نص")
-                return clean_text(text), clean_text(sharh)
-            else:
-                # عنصر نصي ربما HTML
-                return extract_from_html(str(chosen))
-        elif isinstance(ahadith, dict):
-            # حالة وجود result (HTML)
-            result_html = ahadith.get("result", "")
-            if not result_html:
-                raise Exception("لا توجد نتائج")
-            return extract_from_html(result_html)
-        else:
-            raise Exception("شكل بيانات غير معروف")
-            
-    except Exception as e:
-        raise Exception(f"فشل جلب المحتوى: {e}")
+    if sharh_text:
+        msg += f"\n<b>شرح الحديث:</b>\n{html.escape(sharh_text)}"
+    
+    return msg
 
+# ---------- دوال جلب المحتوى حسب النوع ----------
 def fetch_hadith():
-    term = random.choice(HADITH_TERMS)
-    return fetch_from_dorar(term)
+    html = get_random_page("https://dorar.net/hadith/random")
+    return extract_hadith_data(html)
 
 def fetch_fiqh():
-    term = random.choice(FIQH_TERMS)
-    return fetch_from_dorar(term)
+    # بالنسبة للفقه والعقيدة، سنبقي على الطريقة القديمة أو نخصص صفحات مماثلة
+    # يمكن لاحقاً توسيعها
+    html = get_random_page("https://dorar.net/feqhia/random")
+    # استخراج بسيط للمسألة (يعتمد على هيكل الموقع)
+    soup = BeautifulSoup(html, 'html.parser')
+    title = soup.find('h1')
+    question = title.get_text(strip=True) if title else "مسألة فقهية"
+    answer_div = soup.find('div', class_='content') or soup.find('div', class_='answer')
+    answer = answer_div.get_text(separator='\n', strip=True) if answer_div else ""
+    return clean_text(question), clean_text(answer)
 
 def fetch_aqeeda():
-    term = random.choice(AQEEDA_TERMS)
-    return fetch_from_dorar(term)
+    html = get_random_page("https://dorar.net/aqadia/random")
+    soup = BeautifulSoup(html, 'html.parser')
+    title = soup.find('h1')
+    subject = title.get_text(strip=True) if title else "موضوع في العقيدة"
+    content_div = soup.find('div', class_='content') or soup.find('div', class_='article')
+    content = content_div.get_text(separator='\n', strip=True) if content_div else ""
+    return clean_text(subject), clean_text(content)
 
-# ---------- تنسيق الرسائل ----------
-def format_hadith_message(hadith_text, sharh):
-    text = "📜 <b>حديث اليوم</b>\n\n"
-    text += f"<b>الحديث:</b>\n{html.escape(hadith_text)}\n\n"
-    if sharh:
-        text += f"<b>الشرح:</b>\n{html.escape(sharh)}"
-    return text
-
+# ---------- تنسيق باقي الأنواع ----------
 def format_fiqh_message(question, answer):
     text = "📚 <b>مسألة فقهية</b>\n\n"
     text += f"<b>السؤال:</b>\n{html.escape(question)}\n\n"
@@ -177,14 +223,14 @@ def main():
 
     try:
         if topic_type == "hadith":
-            text, sharh = fetch_hadith()
-            msg = format_hadith_message(text, sharh)
+            hadith_text, rawi, muhaddith, masdar, page, hukm, sharh = fetch_hadith()
+            msg = format_hadith_message(hadith_text, rawi, muhaddith, masdar, page, hukm, sharh)
         elif topic_type == "fiqh":
-            text, sharh = fetch_fiqh()
-            msg = format_fiqh_message(text, sharh)
+            question, answer = fetch_fiqh()
+            msg = format_fiqh_message(question, answer)
         elif topic_type == "aqeeda":
-            text, sharh = fetch_aqeeda()
-            msg = format_aqeeda_message(text, sharh)
+            title, content = fetch_aqeeda()
+            msg = format_aqeeda_message(title, content)
         else:
             print("❌ نوع غير معروف")
             sys.exit(1)
@@ -192,7 +238,6 @@ def main():
         print("\n" + "="*40)
         print(msg)
         print("="*40 + "\n")
-        
         send_message(msg)
 
     except Exception as e:

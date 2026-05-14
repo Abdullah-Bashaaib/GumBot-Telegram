@@ -1,0 +1,21 @@
+name: نشر مسألة فقهية ظهراً
+
+on:
+  schedule:
+    - cron: '0 9 * * *'   # 12:00 PM Mecca time
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - name: تشغيل البوت - فقه
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python post_topic.py fiqh

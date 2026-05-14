@@ -29,59 +29,25 @@ def clean_text(text):
     text = re.sub(r' +', ' ', text).strip()
     return text
 
-# ---------- كلمات البحث ----------
-HADITH_TERMS = [
-    "الصلاة", "الصيام", "الزكاة", "الحج", "الإيمان", "الإحسان",
-    "بر الوالدين", "صلة الرحم", "الصدق", "الأمانة", "التقوى",
-    "الجنة", "النار", "الذكر", "الدعاء", "الاستغفار", "التوبة"
-]
+# ---------- جلب شرح حديث برقم معين ----------
+def fetch_sharh_by_id(hadith_id):
+    url = f"https://dorar.net/hadith/sharh/{hadith_id}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        resp = requests.get(url, timeout=15, headers=headers)
+        if resp.status_code == 200 and "الموسوعة الحديثية" in resp.text:
+            return resp.text
+        else:
+            return None
+    except:
+        return None
 
-# ---------- استخراج البيانات من صفحة الحديث العشوائية ----------
-def get_random_hadith_link():
-    """يبحث بكلمة عشوائية ويعيد رابط أول نتيجة"""
-    term = random.choice(HADITH_TERMS)
-    api_url = f"https://dorar.net/dorar_api.json?skey={term}"
-    print(f"🔍 جاري البحث عن: {term}")
-    resp = requests.get(api_url, timeout=20)
-    resp.raise_for_status()
-    data = resp.json()
-    ahadith = data.get("ahadith", {})
-    if not ahadith or "result" not in ahadith:
-        raise Exception("لم يتم العثور على نتائج")
-    soup = BeautifulSoup(ahadith["result"], 'html.parser')
-    canonical_link = soup.find('link', rel='canonical')
-    if canonical_link and canonical_link.get('href'):
-        return canonical_link['href']
-    # إذا لم نجد رابطاً نأخذ أول حديث ونحاول استخراج رقم
-    hadith_div = soup.find('div', class_='hadith')
-    if hadith_div:
-        onclick = hadith_div.get('onclick', '')
-        match = re.search(r'/hadith/(\d+)', onclick)
-        if match:
-            return f"https://dorar.net/hadith/{match.group(1)}"
-    raise Exception("لم نتمكن من العثور على رابط الحديث")
-
-def extract_sharh_page(hadith_page_url):
-    """يحول رابط الحديث إلى رابط الشرح ويجلب المحتوى"""
-    # استخراج الرقم من رابط الحديث
-    match = re.search(r'/hadith/(\d+)', hadith_page_url)
-    if not match:
-        raise Exception("رابط الحديث لا يحتوي على رقم")
-    hadith_id = match.group(1)
-    sharh_url = f"https://dorar.net/hadith/sharh/{hadith_id}"
-    print(f"📖 جاري جلب الشرح من: {sharh_url}")
-    resp = requests.get(sharh_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
-    resp.raise_for_status()
-    return resp.text
-
-def parse_hadith_data(html_content):
-    """يستخرج الحديث والمعلومات والشرح من صفحة الشرح"""
+def extract_data_from_sharh(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     
-    # الحديث النبوي (غالباً في div بكلاس hadith-text أو داخل article)
+    # الحديث الشريف
     hadith_div = soup.find('div', class_='hadith-text') or soup.find('div', class_='hadith')
     if not hadith_div:
-        # محاولة أخيرة: النص الطويل الأول
         hadith_div = soup.find('div', class_='text-justify')
     if not hadith_div:
         raise Exception("لم يتم العثور على نص الحديث")
@@ -89,38 +55,63 @@ def parse_hadith_data(html_content):
     hadith_text = re.sub(r'^\d+\s*-\s*', '', hadith_text).strip()
     hadith_text = clean_text(hadith_text)
     
-    # استخراج خلاصة الحكم والراوي والمحدث (من الجدول أو div info)
+    # استخراج المعلومات (الحكم، الراوي، المحدث، المصدر، الصفحة)
     hukm = rawi = muhaddith = masdar = page = ""
-    # البحث في عناصر تحمل هذه البيانات
     info_div = soup.find('div', class_='hadith-info')
     if info_div:
-        spans = info_div.find_all('span')
+        # التعامل مع النموذج الذي رأيناه في صفحة 14372
+        spans = info_div.find_all('span', class_='info-subtitle')
         for span in spans:
-            text = span.get_text(strip=True)
-            if 'خلاصة' in text:
-                hukm = span.find_next('span').get_text(strip=True) if span.find_next('span') else ""
-            elif 'الراوي' in text:
-                rawi = span.find_next('span').get_text(strip=True) if span.find_next('span') else ""
-            elif 'المحدث' in text:
-                muhaddith = span.find_next('span').get_text(strip=True) if span.find_next('span') else ""
-            elif 'المصدر' in text:
-                masdar = span.find_next('span').get_text(strip=True) if span.find_next('span') else ""
-            elif 'الصفحة' in text:
-                page = span.find_next('span').get_text(strip=True) if span.find_next('span') else ""
+            label = span.get_text(strip=True)
+            value_span = span.find_next('span')
+            value = value_span.get_text(strip=True) if value_span else ""
+            if 'خلاصة' in label:
+                hukm = value
+            elif 'الراوي' in label:
+                rawi = value
+            elif 'المحدث' in label:
+                muhaddith = value
+            elif 'المصدر' in label:
+                masdar = value
+            elif 'الصفحة' in label:
+                page = value
     
-    # الشرح: عادة بعد الحديث مباشرة، في div يلي الحديث أو بكلاس sharh
-    sharh_div = soup.find('div', class_='sharh') or soup.find('div', id='sharh')
-    if not sharh_div:
-        # ربما الشرح هو الفقرات التالية للحديث
-        sharh_div = soup.find('div', class_='content')
+    # الشرح: النص الطويل بعد الحديث (غالباً الفقرات بعد المعلومات)
     sharh_text = ""
-    if sharh_div:
-        sharh_text = sharh_div.get_text(separator='\n', strip=True)
-        sharh_text = clean_text(sharh_text)
+    # قد يكون الشرح في div يلي info_div مباشرة، أو في article
+    content_div = soup.find('div', class_='content') or soup.find('article')
+    if content_div:
+        paragraphs = content_div.find_all('p')
+        sharh_text = '\n'.join(p.get_text(strip=True) for p in paragraphs)
+    else:
+        # محاولة أخيرة: النص بعد info_div
+        if info_div:
+            next_sibling = info_div.find_next_sibling()
+            if next_sibling:
+                sharh_text = next_sibling.get_text(separator='\n', strip=True)
+    sharh_text = clean_text(sharh_text)
     
     return hadith_text, hukm, rawi, muhaddith, masdar, page, sharh_text
 
-# ---------- باقي الدوال (التنسيق والإرسال) ----------
+def get_random_hadith():
+    """يحاول العثور على حديث عشوائي بتجربة أرقام عشوائية"""
+    # نطاق شائع للأحاديث في الموسوعة (يمكن توسيعه)
+    tried = set()
+    max_attempts = 20
+    for _ in range(max_attempts):
+        # أرقام شائعة بين 1 و 20000
+        rid = random.randint(1, 20000)
+        if rid in tried:
+            continue
+        tried.add(rid)
+        print(f"🔄 تجربة الرقم: {rid}")
+        html = fetch_sharh_by_id(rid)
+        if html:
+            print(f"✅ وجدنا شرحاً للحديث رقم: {rid}")
+            return html
+    raise Exception("لم نعثر على شرح حديث بعد عدة محاولات")
+
+# ---------- التنسيق والإرسال ----------
 def format_hadith_message(hadith_text, hukm, rawi, muhaddith, masdar, page, sharh_text):
     msg = "📜 <b>حديث شريف:</b>\n\n"
     msg += f"قال رسول الله صلى الله عليه وسلم: {html.escape(hadith_text)}\n\n"
@@ -161,16 +152,11 @@ def main():
     topic_type = sys.argv[1].lower()
     try:
         if topic_type == "hadith":
-            # 1. الحصول على رابط حديث عشوائي
-            hadith_link = get_random_hadith_link()
-            # 2. تحويله لصفحة الشرح وجلبها
-            sharh_html = extract_sharh_page(hadith_link)
-            # 3. تحليل البيانات
-            hadith_text, hukm, rawi, muhaddith, masdar, page, sharh = parse_hadith_data(sharh_html)
+            sharh_html = get_random_hadith()
+            hadith_text, hukm, rawi, muhaddith, masdar, page, sharh = extract_data_from_sharh(sharh_html)
             msg = format_hadith_message(hadith_text, hukm, rawi, muhaddith, masdar, page, sharh)
         else:
-            # الفقه والعقيدة نستخدم طريقة مبسطة مؤقتاً
-            print("⚠️ الفقه والعقيدة قيد التطوير بنفس الطريقة")
+            print("⚠️ الفقه والعقيدة قيد التطوير")
             sys.exit(0)
         print("\n" + "="*40)
         print(msg)

@@ -47,7 +47,6 @@ GRADE_AR = {
     "munkar": "منكر",
 }
 
-# الأحكام المقبولة
 ACCEPTED_GRADES = ["sahih", "hasan", "sahih hasan", "hasan sahih", "mauquf sahih"]
 
 def translate_collection(name_en):
@@ -65,22 +64,28 @@ def is_accepted_grade(grade_en):
         return False
     return grade_en.lower().strip() in ACCEPTED_GRADES
 
-# ---------- تنظيف النص ----------
+# ---------- تنظيف النص العربي ----------
 def clean_arabic(text):
     if not text:
         return ""
-    # إزالة الرموز المخفية
     text = re.sub(
         r'[\u200b\u200c\u200d\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2060\u2061\u2062\u2063\u2064\u2066\u2067\u2068\u2069\uFEFF]',
         '', text)
-    # تطبيع Unicode لضمان اتصال الحروف
     text = unicodedata.normalize('NFC', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-# ---------- جلب حديث صحيح واحد ----------
+# ---------- هروب أحرف MarkdownV2 ----------
+def escape_markdown_v2(text):
+    """هروب الأحرف الخاصة في MarkdownV2"""
+    if not text:
+        return ""
+    # الشخصيات التي يجب هروبها: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
+
+# ---------- جلب حديث صحيح ----------
 def fetch_hadith():
-    """يحاول حتى يجد حديثًا صحيحًا أو حسنًا"""
     max_attempts = 10
     for attempt in range(1, max_attempts + 1):
         print(f"📜 محاولة {attempt} لجلب حديث صحيح...")
@@ -111,7 +116,6 @@ def fetch_hadith():
             print(f"   ⚠️ الحديث {grade_ar} مرفوض")
             continue
 
-        # حديث مقبول
         arabic_text = clean_arabic(arabic_text)
         collection_ar = translate_collection(collection)
         grade_ar = translate_grade(grade)
@@ -120,19 +124,31 @@ def fetch_hadith():
 
     raise Exception("لم نعثر على حديث صحيح بعد عدة محاولات")
 
-# ---------- تنسيق الرسالة ----------
+# ---------- تنسيق الرسالة (MarkdownV2 مع اقتباس) ----------
 def format_hadith(arabic_text, collection, number, grade):
-    msg = "📜 <b>حديث اليوم</b>\n\n"
-    msg += f"{html.escape(arabic_text)}\n\n"
+    # هروب النصوص
+    text_escaped = escape_markdown_v2(arabic_text)
+    collection_esc = escape_markdown_v2(collection) if collection else ""
+    grade_esc = escape_markdown_v2(grade) if grade else ""
+    number_esc = str(number) if number else ""
+
+    # بناء الرسالة
+    msg = "📜 *حديث اليوم*\n\n"
+    # الاقتباس: نضيف > في بداية كل سطر من الحديث
+    # سنقوم بتقسيم النص الطويل إلى سطور إن أمكن، وإلا نضعه كله بعد >
+    # للحصول على تنسيق جيد، نضع النص كاملاً بعد > ونضيف مسافة
+    msg += f"> {text_escaped}\n\n"
+
     info = []
-    if collection:
-        info.append(f"📖 <b>المصدر:</b> {html.escape(collection)}")
-    if number:
-        info.append(f"🔢 <b>رقم الحديث:</b> {number}")
+    if collection_esc:
+        info.append(f"📖 *المصدر:* {collection_esc}")
+    if number_esc:
+        info.append(f"🔢 *رقم الحديث:* {number_esc}")
     if info:
         msg += " | ".join(info) + "\n"
-    if grade:
-        msg += f"✅ <b>الحكم:</b> {html.escape(grade)}"
+    if grade_esc:
+        msg += f"✅ *الحكم:* {grade_esc}"
+
     return msg
 
 # ---------- إرسال الرسالة ----------
@@ -141,11 +157,13 @@ def send_message(text):
     payload = {
         "chat_id": CHANNEL_ID,
         "text": text,
-        "parse_mode": "HTML",
+        "parse_mode": "MarkdownV2",
         "disable_web_page_preview": True
     }
     r = requests.post(url, json=payload)
     if r.status_code != 200:
+        # طباعة الرد للمساعدة في تصحيح الأخطاء
+        print(f"❌ فشل الإرسال: {r.text}")
         raise Exception(f"فشل الإرسال: {r.text}")
     print("✅ تم إرسال الرسالة بنجاح")
 
@@ -161,7 +179,6 @@ def main():
         sys.exit(1)
 
     try:
-        # جلب الحديث
         arabic, col, num, grade = fetch_hadith()
         msg = format_hadith(arabic, col, num, grade)
 

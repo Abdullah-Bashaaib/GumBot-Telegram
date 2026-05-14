@@ -2,7 +2,6 @@
 import os
 import sys
 import re
-import html
 import random
 import requests
 import unicodedata
@@ -77,10 +76,8 @@ def clean_arabic(text):
 
 # ---------- هروب أحرف MarkdownV2 ----------
 def escape_markdown_v2(text):
-    """هروب الأحرف الخاصة في MarkdownV2"""
     if not text:
         return ""
-    # الشخصيات التي يجب هروبها: _ * [ ] ( ) ~ ` > # + - = | { } . !
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
@@ -126,17 +123,12 @@ def fetch_hadith():
 
 # ---------- تنسيق الرسالة (MarkdownV2 مع اقتباس) ----------
 def format_hadith(arabic_text, collection, number, grade):
-    # هروب النصوص
     text_escaped = escape_markdown_v2(arabic_text)
     collection_esc = escape_markdown_v2(collection) if collection else ""
     grade_esc = escape_markdown_v2(grade) if grade else ""
     number_esc = str(number) if number else ""
 
-    # بناء الرسالة
     msg = "📜 *حديث اليوم*\n\n"
-    # الاقتباس: نضيف > في بداية كل سطر من الحديث
-    # سنقوم بتقسيم النص الطويل إلى سطور إن أمكن، وإلا نضعه كله بعد >
-    # للحصول على تنسيق جيد، نضع النص كاملاً بعد > ونضيف مسافة
     msg += f"> {text_escaped}\n\n"
 
     info = []
@@ -145,7 +137,7 @@ def format_hadith(arabic_text, collection, number, grade):
     if number_esc:
         info.append(f"🔢 *رقم الحديث:* {number_esc}")
     if info:
-        msg += " | ".join(info) + "\n"
+        msg += " • ".join(info) + "\n"
     if grade_esc:
         msg += f"✅ *الحكم:* {grade_esc}"
 
@@ -162,7 +154,6 @@ def send_message(text):
     }
     r = requests.post(url, json=payload)
     if r.status_code != 200:
-        # طباعة الرد للمساعدة في تصحيح الأخطاء
         print(f"❌ فشل الإرسال: {r.text}")
         raise Exception(f"فشل الإرسال: {r.text}")
     print("✅ تم إرسال الرسالة بنجاح")

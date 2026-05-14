@@ -1,0 +1,22 @@
+name: نشر حديث الصباح
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 7:00 AM Mecca time (UTC+3)
+  workflow_dispatch:      # للتشغيل اليدوي عند الحاجة
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: تثبيت Python والمتطلبات
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - name: تشغيل البوت - حديث
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python post_topic.py hadith

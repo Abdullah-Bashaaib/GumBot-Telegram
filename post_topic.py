@@ -22,6 +22,7 @@ COLLECTION_NAMES_AR = {
     "sahih muslim": "صحيح مسلم",
     "jami at-tirmidhi": "جامع الترمذي",
     "sunan abi dawud": "سنن أبي داود",
+    "Sunan Abu Dawud":"سنن أبي داود",
     "sunan an-nasa'i": "سنن النسائي",
     "sunan ibn majah": "سنن ابن ماجه",
     "muwatta malik": "موطأ مالك",

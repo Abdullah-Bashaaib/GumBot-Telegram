@@ -3,93 +3,115 @@ import sys
 import re
 import html
 import requests
-from datetime import datetime
+import random
 
-# ---------- الإعدادات من متغيرات البيئة ----------
+# ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
 if not BOT_TOKEN or not CHANNEL_ID:
-    print("❌ يجب تعيين BOT_TOKEN و CHANNEL_ID كمتغيرات بيئة")
+    print("❌ يجب تعيين BOT_TOKEN و CHANNEL_ID")
     sys.exit(1)
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-DORAR_BASE = "https://api.dorar.net"
 
 # ---------- دالة تنظيف النص ----------
 def clean_text(text):
-    """إزالة أي روابط، إشارات للمصدر، أو كلمات مفتاحية من النص"""
     if not text:
         return ""
+    # إزالة وسوم HTML
+    text = re.sub(r'<[^>]+>', '', text)
     # إزالة الروابط
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
-    # إزالة إشارات موقع الدرر السنية
+    # إزالة إشارات المصدر
     text = re.sub(r'الدرر السنية', '', text, flags=re.IGNORECASE)
     text = re.sub(r'dorar\.net', '', text, flags=re.IGNORECASE)
-    # إزالة أي سطر يبدأ بـ "المصدر:" أو "الرابط:" إلخ
-    text = re.sub(r'^(?:المصدر|الرابط|مصدر|رابط)\s*:?\s*.*$', '', text,
-                  flags=re.MULTILINE | re.IGNORECASE)
-    # إزالة فراغات زائدة
+    text = re.sub(r'^(?:المصدر|الرابط|مصدر|رابط)\s*:?\s*.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # تنظيف الفراغات
     text = re.sub(r'\n\s*\n', '\n', text)
     text = re.sub(r' +', ' ', text).strip()
     return text
 
+# ---------- كلمات البحث العشوائية للأحاديث ----------
+HADITH_SEARCH_TERMS = [
+    "الصلاة", "الصيام", "الزكاة", "الحج", "الإيمان", "الإحسان",
+    "بر الوالدين", "صلة الرحم", "الصدق", "الأمانة", "التقوى",
+    "الجنة", "النار", "الذكر", "الدعاء", "الاستغفار", "التوبة",
+    "العلم", "الرفق", "الحياء", "حسن الخلق", "الجار", "اليتيم"
+]
+
+FIQH_SEARCH_TERMS = [
+    "حكم", "واجب", "حرام", "حلال", "مستحب", "مكروه",
+    "طهارة", "صلاة", "صيام", "زكاة", "حج", "نكاح", "طلاق",
+    "بيع", "ربا", "ميراث", "حد", "قصاص", "جهاد"
+]
+
+AQEEDA_SEARCH_TERMS = [
+    "توحيد", "أسماء الله", "صفات الله", "الإيمان", "القدر",
+    "الملائكة", "الكتب", "الرسل", "اليوم الآخر", "الجنة والنار",
+    "الشرك", "الكفر", "النفاق", "البدعة", "السنة"
+]
+
 # ---------- دوال جلب المحتوى ----------
+def fetch_from_dorar(search_term, hadith_only=False):
+    """جلب نتائج من API الدرر السنية"""
+    url = f"https://dorar.net/dorar_api.json?skey={search_term}"
+    
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        
+        if "ahadith" in data and data["ahadith"] and len(data["ahadith"]) > 0:
+            # اختيار حديث عشوائي من النتائج
+            hadith = random.choice(data["ahadith"])
+            text = hadith.get("hadith", "").strip()
+            sharh = hadith.get("sharh", "").strip()
+            
+            if not text:
+                raise Exception("الحديث فارغ")
+            
+            return clean_text(text), clean_text(sharh)
+        else:
+            raise Exception("لا توجد نتائج")
+            
+    except Exception as e:
+        raise Exception(f"فشل جلب المحتوى: {e}")
+
 def fetch_hadith():
-    resp = requests.get(f"{DORAR_BASE}/hadith/random")
-    resp.raise_for_status()
-    data = resp.json()
-    hadith_text = data.get("hadith", "").strip()
-    sharh = data.get("sharh", "").strip()
-    if not hadith_text:
-        raise Exception("الحديث فارغ")
-    return clean_text(hadith_text), clean_text(sharh)
+    """جلب حديث عشوائي"""
+    term = random.choice(HADITH_SEARCH_TERMS)
+    return fetch_from_dorar(term)
 
 def fetch_fiqh():
-    resp = requests.get(f"{DORAR_BASE}/feqhia/random")
-    resp.raise_for_status()
-    data = resp.json()
-    question = data.get("question", "").strip()
-    answer = data.get("answer", "").strip()
-    if not question:
-        raise Exception("السؤال الفقهي فارغ")
-    return clean_text(question), clean_text(answer)
+    """جلب مسألة فقهية"""
+    term = random.choice(FIQH_SEARCH_TERMS)
+    return fetch_from_dorar(term)
 
 def fetch_aqeeda():
-    resp = requests.get(f"{DORAR_BASE}/aqadia/random")
-    resp.raise_for_status()
-    data = resp.json()
-    title = data.get("title", "").strip()
-    content = data.get("content", "").strip()
-    if not title:
-        raise Exception("عنوان العقيدة فارغ")
-    return clean_text(title), clean_text(content)
+    """جلب موضوع عقيدة"""
+    term = random.choice(AQEEDA_SEARCH_TERMS)
+    return fetch_from_dorar(term)
 
-# ---------- تنسيق الرسائل (بدون روابط) ----------
+# ---------- تنسيق الرسائل ----------
 def format_hadith_message(hadith_text, sharh):
-    text = (
-        "\ud83d\udcdc <b>حديث اليوم</b>\n\n"
-        f"<b>الحديث:</b>\n{html.escape(hadith_text)}\n\n"
-    )
+    text = "📜 <b>حديث اليوم</b>\n\n"
+    text += f"<b>الحديث:</b>\n{html.escape(hadith_text)}\n\n"
     if sharh:
         text += f"<b>الشرح:</b>\n{html.escape(sharh)}"
     return text
 
 def format_fiqh_message(question, answer):
-    text = (
-        "\ud83d\udcda <b>سؤال فقهي</b>\n\n"
-        f"<b>السؤال:</b>\n{html.escape(question)}\n\n"
-    )
+    text = "📚 <b>مسألة فقهية</b>\n\n"
+    text += f"<b>السؤال:</b>\n{html.escape(question)}\n\n"
     if answer:
         text += f"<b>الجواب:</b>\n{html.escape(answer)}"
     return text
 
 def format_aqeeda_message(title, content):
-    text = (
-        "\ud83c\udfea <b>في العقيدة</b>\n\n"
-        f"<b>{html.escape(title)}</b>\n"
-    )
+    text = "🕌 <b>في العقيدة</b>\n\n"
+    text += f"<b>{html.escape(title)}</b>\n"
     if content:
         text += f"\n{html.escape(content)}"
     return text
@@ -106,7 +128,7 @@ def send_message(text):
     r = requests.post(url, json=payload)
     if r.status_code != 200:
         raise Exception(f"فشل الإرسال: {r.text}")
-    print("\u2705 تم إرسال الرسالة بنجاح")
+    print("✅ تم إرسال الرسالة بنجاح")
 
 # ---------- الدالة الرئيسية ----------
 def main():
@@ -127,14 +149,13 @@ def main():
             title, content = fetch_aqeeda()
             msg = format_aqeeda_message(title, content)
         else:
-            print("❌ نوع غير معروف. استخدم hadith, fiqh أو aqeeda")
+            print("❌ نوع غير معروف")
             sys.exit(1)
 
-        # طباعة الرسالة لتسجيل الخروج (لأغراض المراقبة)
-        print("--- رسالة سيتم إرسالها ---")
+        print("--- الرسالة ---")
         print(msg)
-        print("---------------------------")
-
+        print("---------------")
+        
         send_message(msg)
 
     except Exception as e:

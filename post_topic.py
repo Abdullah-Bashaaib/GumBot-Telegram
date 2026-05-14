@@ -16,20 +16,15 @@ if not BOT_TOKEN or not CHANNEL_ID:
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# ---------- أدوات تنظيف بسيطة (فقط الروابط والمصادر) ----------
+# ---------- تنظيف بسيط (يزيل الروابط وإشارات الموقع فقط) ----------
 def simple_clean(text):
     if not text:
         return ""
-    # إزالة الروابط
     text = re.sub(r'https?://\S+', '', text)
-    # إزالة إشارات الموقع
     text = re.sub(r'الدرر السنية', '', text, flags=re.IGNORECASE)
     text = re.sub(r'dorar\.net', '', text, flags=re.IGNORECASE)
     text = re.sub(r'^(?:المصدر|الرابط|مصدر|رابط)\s*:?\s*.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
-    # نحافظ على التنسيق الأصلي
-    text = re.sub(r'\n\s*\n', '\n', text)
-    text = re.sub(r' +', ' ', text).strip()
-    return text
+    return text.strip()
 
 # ---------- كلمات البحث ----------
 HADITH_TERMS = [
@@ -38,83 +33,71 @@ HADITH_TERMS = [
     "الجنة", "النار", "الذكر", "الدعاء", "الاستغفار", "التوبة"
 ]
 
-# ---------- دوال جلب الحديث ----------
-def fetch_hadith_from_api():
+def fetch_hadith_data():
+    """يطلب API بصيغة JSONP ويعيد حديثاً عشوائياً مع رقمه (إن وجد)"""
     term = random.choice(HADITH_TERMS)
-    api_url = f"https://dorar.net/dorar_api.json?skey={term}"
-    print(f"🔍 جاري البحث عن: {term}")
+    # نستخدم callback=jsonp للحصول على مصفوفة أحاديث
+    api_url = f"https://dorar.net/dorar_api.json?skey={term}&callback=jsonp"
+    print(f"🔍 البحث عن: {term}")
     resp = requests.get(api_url, timeout=20)
     resp.raise_for_status()
-    data = resp.json()
-    ahadith = data.get("ahadith", {})
-    if not ahadith or "result" not in ahadith:
-        raise Exception("لم يتم العثور على نتائج")
-    return ahadith["result"]
+    # الاستجابة تأتي على شكل: jsonp({...})
+    content = resp.text
+    # استخراج JSON من داخل jsonp(...)
+    json_match = re.search(r'jsonp\((.*)\)\s*$', content, re.DOTALL)
+    if not json_match:
+        raise Exception("لم نتمكن من استخراج JSON من الاستجابة")
+    data = json_match.group(1)
+    import json
+    data = json.loads(data)
+    ahadith = data.get("ahadith", [])
+    if not isinstance(ahadith, list) or len(ahadith) == 0:
+        raise Exception("لا توجد أحاديث في النتيجة")
+    # اختيار حديث عشوائي
+    chosen = random.choice(ahadith)
+    # نص الحديث كما هو (بترقيمه)
+    hadith_text = chosen.get("th", "") or chosen.get("hadith", "")
+    if not hadith_text:
+        raise Exception("الحديث لا يحتوي على نص")
+    # محاولة استخراج رقم الحديث من id أو url
+    hadith_id = None
+    if "id" in chosen:
+        hadith_id = chosen["id"]
+    elif "url" in chosen:
+        match = re.search(r'/hadith/(\d+)', chosen["url"])
+        if match:
+            hadith_id = int(match.group(1))
+    # إذا لم نجد id، نحاول استخراجه من نص الحديث (مثل "1 - ...")
+    if not hadith_id:
+        match = re.match(r'^(\d+)\s*-\s*', hadith_text)
+        if match:
+            hadith_id = int(match.group(1))
+    return simple_clean(hadith_text), hadith_id
 
-def extract_hadith_and_link(html_snippet):
-    soup = BeautifulSoup(html_snippet, 'html.parser')
-    # الحديث: أول div بكلاس hadith
-    hadith_div = soup.find('div', class_='hadith')
-    if not hadith_div:
-        raise Exception("لم يتم العثور على نص الحديث")
-    # أخذ الحديث كما هو مع ترقيمه
-    hadith_text = hadith_div.get_text(separator=' ', strip=True)
-    hadith_text = simple_clean(hadith_text)
-    
-    # استخراج رابط الصفحة (canonical)
-    canonical_link = soup.find('link', rel='canonical')
-    if canonical_link and canonical_link.get('href'):
-        hadith_page = canonical_link['href']
-        print(f"🔗 رابط الحديث: {hadith_page}")
-        return hadith_text, hadith_page
-    
-    # إذا لم نجد، نحاول استخراج الرقم من onclick
-    onclick = hadith_div.get('onclick', '')
-    match = re.search(r'/hadith/(\d+)', onclick)
-    if match:
-        hadith_page = f"https://dorar.net/hadith/{match.group(1)}"
-        return hadith_text, hadith_page
-    
-    # لا يوجد رابط
-    return hadith_text, None
-
-def fetch_sharh(hadith_page_url):
-    """تحويل رابط الحديث إلى رابط شرح وجلب الشرح"""
-    if not hadith_page_url:
+def fetch_sharh(hadith_id):
+    """يجلب شرح الحديث من صفحة sharh إذا عرفنا الرقم"""
+    if not hadith_id:
         return ""
-    match = re.search(r'/hadith/(\d+)', hadith_page_url)
-    if not match:
-        print("⚠️ لا يمكن استخراج رقم الحديث من الرابط")
-        return ""
-    sharh_url = f"https://dorar.net/hadith/sharh/{match.group(1)}"
-    print(f"📖 جاري جلب الشرح من: {sharh_url}")
+    sharh_url = f"https://dorar.net/hadith/sharh/{hadith_id}"
+    print(f"📖 جاري جلب الشرح: {sharh_url}")
     try:
         resp = requests.get(sharh_url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
         if resp.status_code != 200:
             return ""
         soup = BeautifulSoup(resp.text, 'html.parser')
-        # الشرح يكون عادة في div بكلاس content أو article
-        sharh_div = soup.find('div', class_='content') or soup.find('article')
-        if not sharh_div:
-            # ربما الفقرات بعد معلومات الحديث
-            info = soup.find('div', class_='hadith-info')
-            if info:
-                next_div = info.find_next_sibling()
-                if next_div:
-                    sharh_div = next_div
-        if sharh_div:
-            sharh_text = sharh_div.get_text(separator='\n', strip=True)
-            return simple_clean(sharh_text)
-    except Exception as e:
-        print(f"⚠️ خطأ أثناء جلب الشرح: {e}")
-    return ""
+        # نأخذ النص الكامل من القسم الرئيسي (دون ترويسة الموقع)
+        main = soup.find('div', class_='container') or soup.find('article')
+        if main:
+            return simple_clean(main.get_text(separator='\n', strip=True))
+        return ""
+    except:
+        return ""
 
-# ---------- التنسيق ----------
-def format_hadith_message(hadith_text, sharh_text):
+def format_message(hadith_text, sharh):
     msg = "📜 <b>حديث شريف:</b>\n\n"
     msg += f"قال رسول الله صلى الله عليه وسلم: {html.escape(hadith_text)}\n"
-    if sharh_text:
-        msg += f"\n<b>شرح الحديث:</b>\n{html.escape(sharh_text)}"
+    if sharh:
+        msg += f"\n<b>شرح الحديث:</b>\n{html.escape(sharh)}"
     return msg
 
 def send_message(text):
@@ -130,18 +113,16 @@ def send_message(text):
         raise Exception(f"فشل الإرسال: {r.text}")
     print("✅ تم إرسال الرسالة بنجاح")
 
-# ---------- الرئيسية ----------
 def main():
     if len(sys.argv) < 2:
         print("❌ استخدم: python post_topic.py [hadith|fiqh|aqeeda]")
         sys.exit(1)
-    topic_type = sys.argv[1].lower()
+    topic = sys.argv[1].lower()
     try:
-        if topic_type == "hadith":
-            html_snippet = fetch_hadith_from_api()
-            hadith_text, hadith_page = extract_hadith_and_link(html_snippet)
-            sharh = fetch_sharh(hadith_page) if hadith_page else ""
-            msg = format_hadith_message(hadith_text, sharh)
+        if topic == "hadith":
+            hadith_text, hadith_id = fetch_hadith_data()
+            sharh = fetch_sharh(hadith_id)
+            msg = format_message(hadith_text, sharh)
         else:
             print("⚠️ الفقه والعقيدة قيد التطوير")
             sys.exit(0)

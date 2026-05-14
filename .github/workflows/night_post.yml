@@ -1,10 +1,8 @@
-name: نشر موضوع عقيدة ليلاً
-
+name: حديث الليل
 on:
   schedule:
-    - cron: '0 18 * * *'  # 9:00 PM Mecca time
+    - cron: '0 18 * * *'  # 9:00 مساءً بتوقيت مكة
   workflow_dispatch:
-
 jobs:
   post:
     runs-on: ubuntu-latest
@@ -14,8 +12,8 @@ jobs:
         with:
           python-version: '3.10'
       - run: pip install -r requirements.txt
-      - name: تشغيل البوت - عقيدة
+      - name: تشغيل حديث الليل
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python post_topic.py aqeeda
+        run: python post_topic.py hadith

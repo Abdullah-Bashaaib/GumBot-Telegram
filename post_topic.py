@@ -8,11 +8,15 @@ import unicodedata
 
 # ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHANNEL_ID = os.environ.get("CHANNEL_ID")
+CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")  # ← تغير هنا
 
-if not BOT_TOKEN or not CHANNEL_ID:
-    print("❌ يجب تعيين BOT_TOKEN و CHANNEL_ID")
+if not BOT_TOKEN or not CHANNEL_IDS_RAW:
+    print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS كمتغيرات بيئة")
     sys.exit(1)
+
+# تحويل النص إلى قائمة قنوات (فاصلة بين كل قناة)
+CHANNEL_LIST = [ch.strip() for ch in CHANNEL_IDS_RAW.split(',') if ch.strip()]
+print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -22,7 +26,6 @@ COLLECTION_NAMES_AR = {
     "sahih muslim": "صحيح مسلم",
     "jami at-tirmidhi": "جامع الترمذي",
     "sunan abi dawud": "سنن أبي داود",
-    "Sunan Abu Dawud":"سنن أبي داود",
     "sunan an-nasa'i": "سنن النسائي",
     "sunan ibn majah": "سنن ابن ماجه",
     "muwatta malik": "موطأ مالك",
@@ -122,7 +125,7 @@ def fetch_hadith():
 
     raise Exception("لم نعثر على حديث صحيح بعد عدة محاولات")
 
-# ---------- تنسيق الرسالة (MarkdownV2 مع اقتباس) ----------
+# ---------- تنسيق الرسالة ----------
 def format_hadith(arabic_text, collection, number, grade):
     text_escaped = escape_markdown_v2(arabic_text)
     collection_esc = escape_markdown_v2(collection) if collection else ""
@@ -130,7 +133,7 @@ def format_hadith(arabic_text, collection, number, grade):
     number_esc = str(number) if number else ""
 
     msg = "📜 *حديث اليوم*\n\n"
-    msg += f"> *{text_escaped}*\n\n"
+    msg += f"> {text_escaped}\n\n"
 
     info = []
     if collection_esc:
@@ -138,26 +141,29 @@ def format_hadith(arabic_text, collection, number, grade):
     if number_esc:
         info.append(f"🔢 *رقم الحديث:* {number_esc}")
     if info:
-        msg += " ┃ ".join(info) + "\n"
+        msg += " • ".join(info) + "\n"
     if grade_esc:
         msg += f"✅ *الحكم:* {grade_esc}"
 
     return msg
 
-# ---------- إرسال الرسالة ----------
+# ---------- إرسال الرسالة إلى جميع القنوات ----------
 def send_message(text):
-    url = f"{TELEGRAM_API}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL_ID,
-        "text": text,
-        "parse_mode": "MarkdownV2",
-        "disable_web_page_preview": True
-    }
-    r = requests.post(url, json=payload)
-    if r.status_code != 200:
-        print(f"❌ فشل الإرسال: {r.text}")
-        raise Exception(f"فشل الإرسال: {r.text}")
-    print("✅ تم إرسال الرسالة بنجاح")
+    """ترسل نفس الرسالة إلى كل قناة في CHANNEL_LIST"""
+    for channel_id in CHANNEL_LIST:
+        url = f"{TELEGRAM_API}/sendMessage"
+        payload = {
+            "chat_id": channel_id,
+            "text": text,
+            "parse_mode": "MarkdownV2",
+            "disable_web_page_preview": True
+        }
+        r = requests.post(url, json=payload)
+        if r.status_code != 200:
+            print(f"❌ فشل الإرسال إلى {channel_id}: {r.text}")
+            raise Exception(f"فشل الإرسال إلى {channel_id}: {r.text}")
+        print(f"✅ تم الإرسال إلى {channel_id}")
+    print("✅ تم إرسال الرسالة لجميع القنوات بنجاح")
 
 # ---------- تشغيل ----------
 def main():
@@ -179,7 +185,7 @@ def main():
         print("=" * 40 + "\n")
 
         send_message(msg)
-        print("✅ تم إرسال حديث واحد بنجاح")
+        print("✅ تم إرسال حديث واحد لجميع القنوات")
 
     except Exception as e:
         print(f"❌ خطأ: {e}")

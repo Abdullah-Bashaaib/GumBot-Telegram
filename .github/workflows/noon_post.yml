@@ -15,5 +15,5 @@ jobs:
       - name: تشغيل حديث الظهيرة
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_IDS }}
         run: python post_topic.py hadith

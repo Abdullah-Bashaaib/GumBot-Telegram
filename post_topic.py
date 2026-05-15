@@ -129,8 +129,8 @@ def format_hadith(arabic_text, collection, number, grade):
     grade_esc = escape_markdown_v2(grade) if grade else ""
     number_esc = str(number) if number else ""
 
-    msg = "📜 *حديث اليوم*\n\n"
-    msg += f"> {text_escaped}\n\n"
+    msg = "📜 *حديث اليوم#*\n\n"
+    msg += f"> *{text_escaped}*\n\n"
 
     info = []
     if collection_esc:

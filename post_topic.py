@@ -133,15 +133,15 @@ def format_hadith(arabic_text, collection, number, grade):
     number_esc = str(number) if number else ""
 
     msg = "📜 *حديث اليوم*\n\n"
-    msg += f"> {text_escaped}\n\n"
-
+    msg += f"> *{text_escaped}*\n\n"
+    
     info = []
     if collection_esc:
         info.append(f"📖 *المصدر:* {collection_esc}")
     if number_esc:
         info.append(f"🔢 *رقم الحديث:* {number_esc}")
     if info:
-        msg += " • ".join(info) + "\n"
+        msg += " ┃ ".join(info) + "\n"
     if grade_esc:
         msg += f"✅ *الحكم:* {grade_esc}"
 

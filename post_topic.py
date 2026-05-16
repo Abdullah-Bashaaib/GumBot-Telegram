@@ -217,7 +217,10 @@ def main():
     if topic != "hadith":
         print("❌ هذا السكريبت مخصص للحديث فقط")
         sys.exit(1)
-
+    # رسالة اختبار مؤقتة
+    test_msg = "✅ *اختبار تنبيه:* البوت يعمل وإعدادات ADMIN_CHAT_ID صحيحة."
+    send_telegram_message(ADMIN_CHAT_ID, test_msg)
+    print("تم إرسال رسالة اختبار إلى الأدمن")
     try:
         arabic, col, num, grade = fetch_hadith()
         msg = format_hadith(arabic, col, num, grade)

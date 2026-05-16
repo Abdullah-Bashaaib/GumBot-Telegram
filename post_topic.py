@@ -9,20 +9,21 @@ import unicodedata
 # ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")  # ← جديد: لاستقبال تنبيهات الأخطاء
+ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")
+
+print(f"DEBUG ADMIN_ID raw = '{ADMIN_CHAT_ID}'")  # تشخيص مؤقت
 
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS كمتغيرات بيئة")
     sys.exit(1)
 
-# تحويل النص إلى قائمة قنوات (فاصلة بين كل قناة)
 CHANNEL_LIST = [ch.strip() for ch in CHANNEL_IDS_RAW.split(',') if ch.strip()]
 print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 if ADMIN_CHAT_ID:
     print(f"🔔 سيتم إرسال تنبيهات الأخطاء إلى معرف الأدمن: {ADMIN_CHAT_ID}")
 else:
-    print("⚠️ لم يتم تعيين ADMIN_CHAT_ID، لن يتم إرسال تنبيهات الأخطاء.")
+    print("⚠️ لم يتم تعيين ADMIN_ID، لن يتم إرسال تنبيهات الأخطاء.")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -93,14 +94,15 @@ def escape_markdown_v2(text):
 
 # ---------- دالة عامة لإرسال رسالة تيليجرام إلى أي معرف ----------
 def send_telegram_message(chat_id, text, parse_mode='MarkdownV2'):
-    """ترسل رسالة إلى محادثة معينة وتعيد True إذا نجحت"""
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": parse_mode,
         "disable_web_page_preview": True
     }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+
     try:
         r = requests.post(url, json=payload)
         if r.status_code == 200:
@@ -114,11 +116,10 @@ def send_telegram_message(chat_id, text, parse_mode='MarkdownV2'):
 
 # ---------- إرسال إشعار خطأ إلى الأدمن ----------
 def send_error_notification(error_message):
-    """ترسل تنبيهًا إلى معرف الأدمن إذا تم تعيينه"""
     if not ADMIN_CHAT_ID:
         return
-    text = f"⚠️ *تنبيه خطأ من بوت الحديث:*\n{escape_markdown_v2(error_message)}"
-    send_telegram_message(ADMIN_CHAT_ID, text)
+    text = f"⚠️ تنبيه خطأ من بوت الحديث:\n{error_message}"
+    send_telegram_message(ADMIN_CHAT_ID, text, parse_mode=None)
 
 # ---------- جلب حديث صحيح ----------
 def fetch_hadith():
@@ -182,9 +183,8 @@ def format_hadith(arabic_text, collection, number, grade):
 
     return msg
 
-# ---------- إرسال الرسالة إلى جميع القنوات (مع تجميع الأخطاء) ----------
+# ---------- إرسال الرسالة إلى جميع القنوات ----------
 def send_message(text):
-    """ترسل نفس الرسالة إلى كل قناة في CHANNEL_LIST، مع إشعار عند فشل أي قناة"""
     success_count = 0
     failed_channels = []
 
@@ -197,7 +197,6 @@ def send_message(text):
             failed_channels.append(channel_id)
 
     if failed_channels:
-        # إرسال تنبيه للأدمن بوجود فشل
         error_msg = "فشل إرسال حديث اليوم إلى القنوات التالية:\n"
         error_msg += "\n".join(f"• {ch}" for ch in failed_channels)
         send_error_notification(error_msg)
@@ -217,10 +216,18 @@ def main():
     if topic != "hadith":
         print("❌ هذا السكريبت مخصص للحديث فقط")
         sys.exit(1)
-    # رسالة اختبار مؤقتة
-    test_msg = "✅ *اختبار تنبيه:* البوت يعمل وإعدادات ADMIN_CHAT_ID صحيحة."
-    send_telegram_message(ADMIN_CHAT_ID, test_msg)
-    print("تم إرسال رسالة اختبار إلى الأدمن")
+
+    # رسالة اختبار بدون MarkdownV2 لتفادي أخطاء الهروب
+    if ADMIN_CHAT_ID:
+        send_telegram_message(
+            ADMIN_CHAT_ID,
+            "✅ اختبار تنبيه: البوت يعمل وإعدادات ADMIN_ID صحيحة.",
+            parse_mode=None
+        )
+        print("تم إرسال رسالة اختبار إلى الأدمن")
+    else:
+        print("⚠️ ADMIN_ID غير معيّن، تخطي رسالة الاختبار")
+
     try:
         arabic, col, num, grade = fetch_hadith()
         msg = format_hadith(arabic, col, num, grade)
@@ -235,7 +242,6 @@ def main():
     except Exception as e:
         error_str = str(e)
         print(f"❌ خطأ: {error_str}")
-        # إرسال تنبيه الخطأ العام إلى الأدمن
         send_error_notification(f"حدث خطأ أثناء تشغيل بوت الحديث:\n{error_str}")
         sys.exit(1)
 

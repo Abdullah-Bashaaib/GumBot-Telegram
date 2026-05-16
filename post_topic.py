@@ -8,7 +8,8 @@ import unicodedata
 
 # ---------- الإعدادات ----------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")  # ← تغير هنا
+CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")  # ← جديد: لاستقبال تنبيهات الأخطاء
 
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS كمتغيرات بيئة")
@@ -17,6 +18,11 @@ if not BOT_TOKEN or not CHANNEL_IDS_RAW:
 # تحويل النص إلى قائمة قنوات (فاصلة بين كل قناة)
 CHANNEL_LIST = [ch.strip() for ch in CHANNEL_IDS_RAW.split(',') if ch.strip()]
 print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
+
+if ADMIN_CHAT_ID:
+    print(f"🔔 سيتم إرسال تنبيهات الأخطاء إلى معرف الأدمن: {ADMIN_CHAT_ID}")
+else:
+    print("⚠️ لم يتم تعيين ADMIN_CHAT_ID، لن يتم إرسال تنبيهات الأخطاء.")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -85,6 +91,35 @@ def escape_markdown_v2(text):
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
+# ---------- دالة عامة لإرسال رسالة تيليجرام إلى أي معرف ----------
+def send_telegram_message(chat_id, text, parse_mode='MarkdownV2'):
+    """ترسل رسالة إلى محادثة معينة وتعيد True إذا نجحت"""
+    url = f"{TELEGRAM_API}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": parse_mode,
+        "disable_web_page_preview": True
+    }
+    try:
+        r = requests.post(url, json=payload)
+        if r.status_code == 200:
+            return True
+        else:
+            print(f"⚠️ فشل إرسال رسالة إلى {chat_id}: {r.text}")
+            return False
+    except Exception as e:
+        print(f"⚠️ خطأ في الاتصال أثناء إرسال رسالة إلى {chat_id}: {e}")
+        return False
+
+# ---------- إرسال إشعار خطأ إلى الأدمن ----------
+def send_error_notification(error_message):
+    """ترسل تنبيهًا إلى معرف الأدمن إذا تم تعيينه"""
+    if not ADMIN_CHAT_ID:
+        return
+    text = f"⚠️ *تنبيه خطأ من بوت الحديث:*\n{escape_markdown_v2(error_message)}"
+    send_telegram_message(ADMIN_CHAT_ID, text)
+
 # ---------- جلب حديث صحيح ----------
 def fetch_hadith():
     max_attempts = 10
@@ -134,7 +169,7 @@ def format_hadith(arabic_text, collection, number, grade):
 
     msg = "📜 *حديث اليوم*\n\n"
     msg += f"> *{text_escaped}*\n\n"
-    
+
     info = []
     if collection_esc:
         info.append(f"📖 *المصدر:* {collection_esc}")
@@ -147,23 +182,30 @@ def format_hadith(arabic_text, collection, number, grade):
 
     return msg
 
-# ---------- إرسال الرسالة إلى جميع القنوات ----------
+# ---------- إرسال الرسالة إلى جميع القنوات (مع تجميع الأخطاء) ----------
 def send_message(text):
-    """ترسل نفس الرسالة إلى كل قناة في CHANNEL_LIST"""
+    """ترسل نفس الرسالة إلى كل قناة في CHANNEL_LIST، مع إشعار عند فشل أي قناة"""
+    success_count = 0
+    failed_channels = []
+
     for channel_id in CHANNEL_LIST:
-        url = f"{TELEGRAM_API}/sendMessage"
-        payload = {
-            "chat_id": channel_id,
-            "text": text,
-            "parse_mode": "MarkdownV2",
-            "disable_web_page_preview": True
-        }
-        r = requests.post(url, json=payload)
-        if r.status_code != 200:
-            print(f"❌ فشل الإرسال إلى {channel_id}: {r.text}")
-            raise Exception(f"فشل الإرسال إلى {channel_id}: {r.text}")
-        print(f"✅ تم الإرسال إلى {channel_id}")
-    print("✅ تم إرسال الرسالة لجميع القنوات بنجاح")
+        if send_telegram_message(channel_id, text):
+            print(f"✅ تم الإرسال إلى {channel_id}")
+            success_count += 1
+        else:
+            print(f"❌ فشل الإرسال إلى {channel_id}")
+            failed_channels.append(channel_id)
+
+    if failed_channels:
+        # إرسال تنبيه للأدمن بوجود فشل
+        error_msg = "فشل إرسال حديث اليوم إلى القنوات التالية:\n"
+        error_msg += "\n".join(f"• {ch}" for ch in failed_channels)
+        send_error_notification(error_msg)
+
+    if success_count == 0:
+        raise Exception("لم يتم الإرسال إلى أي قناة بنجاح")
+
+    print(f"✅ تم إرسال الرسالة إلى {success_count} قناة بنجاح")
 
 # ---------- تشغيل ----------
 def main():
@@ -188,7 +230,10 @@ def main():
         print("✅ تم إرسال حديث واحد لجميع القنوات")
 
     except Exception as e:
-        print(f"❌ خطأ: {e}")
+        error_str = str(e)
+        print(f"❌ خطأ: {error_str}")
+        # إرسال تنبيه الخطأ العام إلى الأدمن
+        send_error_notification(f"حدث خطأ أثناء تشغيل بوت الحديث:\n{error_str}")
         sys.exit(1)
 
 if __name__ == "__main__":

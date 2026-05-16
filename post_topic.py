@@ -11,14 +11,11 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")
 
-print(f"DEBUG ADMIN_ID raw = '{ADMIN_CHAT_ID}'")  # تشخيص مؤقت
-
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS كمتغيرات بيئة")
     sys.exit(1)
 
 CHANNEL_LIST = [ch.strip() for ch in CHANNEL_IDS_RAW.split(',') if ch.strip()]
-print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 if ADMIN_CHAT_ID:
     print(f"🔔 سيتم إرسال تنبيهات الأخطاء إلى معرف الأدمن: {ADMIN_CHAT_ID}")
@@ -216,17 +213,6 @@ def main():
     if topic != "hadith":
         print("❌ هذا السكريبت مخصص للحديث فقط")
         sys.exit(1)
-
-    # رسالة اختبار بدون MarkdownV2 لتفادي أخطاء الهروب
-    if ADMIN_CHAT_ID:
-        send_telegram_message(
-            ADMIN_CHAT_ID,
-            "✅ اختبار تنبيه: البوت يعمل وإعدادات ADMIN_ID صحيحة.",
-            parse_mode=None
-        )
-        print("تم إرسال رسالة اختبار إلى الأدمن")
-    else:
-        print("⚠️ ADMIN_ID غير معيّن، تخطي رسالة الاختبار")
 
     try:
         arabic, col, num, grade = fetch_hadith()

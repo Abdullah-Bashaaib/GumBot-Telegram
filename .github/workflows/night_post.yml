@@ -16,4 +16,6 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_IDS: ${{ secrets.CHANNEL_IDS }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}   # ← هذا السطر موجود؟
+
         run: python post_topic.py hadith

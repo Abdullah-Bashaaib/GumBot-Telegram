@@ -1,7 +1,7 @@
 name: حديث الظهيرة
 on:
   schedule:
-    - cron: '0 9 * * *'   # 12:00 ظهرًا بتوقيت مكة
+    - cron: '0 8 * * *'   # 12:00 ظهرًا بتوقيت مكة
   workflow_dispatch:
 jobs:
   post:

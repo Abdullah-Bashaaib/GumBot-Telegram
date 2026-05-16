@@ -1,7 +1,7 @@
 name: حديث الصباح
 on:
   schedule:
-    - cron: '0 4 * * *'   # 7:00 صباحًا بتوقيت مكة
+    - cron: '0 3 * * *'   # 7:00 صباحًا بتوقيت مكة
   workflow_dispatch:
 jobs:
   post:
@@ -16,4 +16,6 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_IDS: ${{ secrets.CHANNEL_IDS }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}   # ← هذا السطر موجود؟
+
         run: python post_topic.py hadith

@@ -1,7 +1,7 @@
 name: حديث الصباح
 on:
   schedule:
-    - cron: '0 3 * * *'   # 7:00 صباحًا بتوقيت مكة
+    - cron: '0 2 * * *'   # 7:00 صباحًا بتوقيت مكة
   workflow_dispatch:
 jobs:
   post:

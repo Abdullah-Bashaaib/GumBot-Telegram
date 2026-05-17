@@ -2,7 +2,6 @@
 import os
 import sys
 import re
-import random
 import requests
 import unicodedata
 
@@ -11,11 +10,16 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
 ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")
 
+STICKER_FILE_ID = "CAACAgQAAxkBAAFJ0dFqCNqgqqCjECNmTxnrb4BkgfqbQgACOQ4AAmzbwVJxfz2bNDpn8TsE"
+
+print(f"DEBUG ADMIN_ID raw = '{ADMIN_CHAT_ID}'")
+
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS كمتغيرات بيئة")
     sys.exit(1)
 
 CHANNEL_LIST = [ch.strip() for ch in CHANNEL_IDS_RAW.split(',') if ch.strip()]
+print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 if ADMIN_CHAT_ID:
     print(f"🔔 سيتم إرسال تنبيهات الأخطاء إلى معرف الأدمن: {ADMIN_CHAT_ID}")
@@ -89,7 +93,7 @@ def escape_markdown_v2(text):
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return re.sub(f'([{re.escape(escape_chars)}])', r'\\\1', text)
 
-# ---------- دالة عامة لإرسال رسالة تيليجرام إلى أي معرف ----------
+# ---------- إرسال رسالة نصية ----------
 def send_telegram_message(chat_id, text, parse_mode='MarkdownV2'):
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
@@ -109,6 +113,25 @@ def send_telegram_message(chat_id, text, parse_mode='MarkdownV2'):
             return False
     except Exception as e:
         print(f"⚠️ خطأ في الاتصال أثناء إرسال رسالة إلى {chat_id}: {e}")
+        return False
+
+# ---------- إرسال ملصق ----------
+def send_sticker(chat_id, file_id):
+    url = f"{TELEGRAM_API}/sendSticker"
+    payload = {
+        "chat_id": chat_id,
+        "sticker": file_id
+    }
+    try:
+        r = requests.post(url, json=payload)
+        if r.status_code == 200:
+            print(f"✅ تم إرسال الملصق إلى {chat_id}")
+            return True
+        else:
+            print(f"⚠️ فشل إرسال الملصق إلى {chat_id}: {r.text}")
+            return False
+    except Exception as e:
+        print(f"⚠️ خطأ في إرسال الملصق إلى {chat_id}: {e}")
         return False
 
 # ---------- إرسال إشعار خطأ إلى الأدمن ----------
@@ -180,17 +203,20 @@ def format_hadith(arabic_text, collection, number, grade):
 
     return msg
 
-# ---------- إرسال الرسالة إلى جميع القنوات ----------
+# ---------- إرسال الحديث والملصق إلى جميع القنوات ----------
 def send_message(text):
     success_count = 0
     failed_channels = []
 
     for channel_id in CHANNEL_LIST:
+        # أولاً: إرسال الحديث
         if send_telegram_message(channel_id, text):
-            print(f"✅ تم الإرسال إلى {channel_id}")
+            print(f"✅ تم إرسال الحديث إلى {channel_id}")
+            # ثانياً: إرسال الملصق مباشرة بعده
+            send_sticker(channel_id, STICKER_FILE_ID)
             success_count += 1
         else:
-            print(f"❌ فشل الإرسال إلى {channel_id}")
+            print(f"❌ فشل إرسال الحديث إلى {channel_id}")
             failed_channels.append(channel_id)
 
     if failed_channels:
@@ -201,7 +227,7 @@ def send_message(text):
     if success_count == 0:
         raise Exception("لم يتم الإرسال إلى أي قناة بنجاح")
 
-    print(f"✅ تم إرسال الرسالة إلى {success_count} قناة بنجاح")
+    print(f"✅ تم إرسال الرسالة والملصق إلى {success_count} قناة بنجاح")
 
 # ---------- تشغيل ----------
 def main():
@@ -213,6 +239,16 @@ def main():
     if topic != "hadith":
         print("❌ هذا السكريبت مخصص للحديث فقط")
         sys.exit(1)
+
+    if ADMIN_CHAT_ID:
+        send_telegram_message(
+            ADMIN_CHAT_ID,
+            "✅ اختبار تنبيه: البوت يعمل وإعدادات ADMIN_ID صحيحة.",
+            parse_mode=None
+        )
+        print("تم إرسال رسالة اختبار إلى الأدمن")
+    else:
+        print("⚠️ ADMIN_ID غير معيّن، تخطي رسالة الاختبار")
 
     try:
         arabic, col, num, grade = fetch_hadith()

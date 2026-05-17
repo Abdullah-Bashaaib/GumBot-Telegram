@@ -240,16 +240,7 @@ def main():
         print("❌ هذا السكريبت مخصص للحديث فقط")
         sys.exit(1)
 
-    if ADMIN_CHAT_ID:
-        send_telegram_message(
-            ADMIN_CHAT_ID,
-            "✅ اختبار تنبيه: البوت يعمل وإعدادات ADMIN_ID صحيحة.",
-            parse_mode=None
-        )
-        print("تم إرسال رسالة اختبار إلى الأدمن")
-    else:
-        print("⚠️ ADMIN_ID غير معيّن، تخطي رسالة الاختبار")
-
+    
     try:
         arabic, col, num, grade = fetch_hadith()
         msg = format_hadith(arabic, col, num, grade)

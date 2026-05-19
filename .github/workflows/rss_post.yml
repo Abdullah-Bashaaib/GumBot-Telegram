@@ -1,7 +1,7 @@
 name: مقال RSS أسبوعي
 on:
   schedule:
-    - cron: '0 5 * * *'   # 8:00 صباحًا بتوقيت مكة
+    - cron: '0 5 * * *'
   workflow_dispatch:
 jobs:
   post:
@@ -16,5 +16,5 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_IDS: ${{ secrets.CHANNEL_IDS }}
-          ADMIN_CHAT_ID: ${{ secrets.ADMIN_ID }}
+          ADMIN_ID: ${{ secrets.ADMIN_ID }}
         run: python rss_poster.py

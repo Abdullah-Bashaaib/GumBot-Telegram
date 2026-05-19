@@ -10,7 +10,7 @@ import feedparser
 # ========== الإعدادات ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID")
+ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")
 
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS")

@@ -141,7 +141,7 @@ def main():
     TEST_MODE = True  # ← اجعلها False عندما تريد النشر الفعلي للقنوات
     # ================================
     # اختبار إرسال مباشر للأدمن
-    if ADMIN_CHAT_ID:
+    if ADMIN_ID:
         print("🧪 اختبار: جاري إرسال رسالة اختبار للأدمن...")
         test_msg = "✅ <b>اختبار RSS</b>\n\nإذا وصلتك هذه الرسالة، فالإعدادات صحيحة."
         ok = send_telegram_message(ADMIN_CHAT_ID, test_msg)

@@ -10,7 +10,7 @@ import feedparser
 # ========== الإعدادات ==========
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
-ADMIN_CHAT_ID = os.environ.get("ADMIN_ID")
+ADMIN_ID = os.environ.get("ADMIN_ID")  # ← تغير هنا
 
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
     print("❌ يجب تعيين BOT_TOKEN و CHANNEL_IDS")
@@ -46,7 +46,6 @@ def clean_summary(text, max_length=350):
     return text
 
 def send_telegram_message(chat_id, text):
-    """إرسال رسالة إلى محادثة واحدة"""
     url = f"{TELEGRAM_API}/sendMessage"
     payload = {
         "chat_id": chat_id,
@@ -67,7 +66,6 @@ def send_telegram_message(chat_id, text):
         return False
 
 def broadcast(text):
-    """إرسال إلى جميع القنوات"""
     success = 0
     for ch in CHANNEL_LIST:
         if send_telegram_message(ch, text):
@@ -76,19 +74,19 @@ def broadcast(text):
 
 def send_to_admin(text):
     """إرسال إلى الأدمن فقط"""
-    if not ADMIN_CHAT_ID:
-        print("❌ ADMIN_CHAT_ID غير معين")
+    if not ADMIN_ID:  # ← تغير هنا
+        print("❌ ADMIN_ID غير معين")
         return False
-    return send_telegram_message(ADMIN_CHAT_ID, text)
+    return send_telegram_message(ADMIN_ID, text)  # ← تغير هنا
 
 def notify_admin(msg, is_error=True):
     """إرسال إشعار للأدمن"""
-    if ADMIN_CHAT_ID:
+    if ADMIN_ID:  # ← تغير هنا
         if is_error:
             full_msg = f"📡 <b>تنبيه RSS</b>\n\n{msg}"
         else:
             full_msg = f"ℹ️ <b>معلومة RSS</b>\n\n{msg}"
-        send_telegram_message(ADMIN_CHAT_ID, full_msg)
+        send_telegram_message(ADMIN_ID, full_msg)  # ← تغير هنا
 
 def fetch_article_from_sources(sources):
     for url in sources:
@@ -120,7 +118,6 @@ def get_today_sources():
     return RSS_SCHEDULE.get(today, [])
 
 def format_article_message(title, link, summary, test_mode=False):
-    """تنسيق المقال مع إشارة للتجربة إن وجدت"""
     msg = ""
     if test_mode:
         msg += "🧪 <b>[رسالة تجربة - للأدمن فقط]</b>\n\n"
@@ -138,26 +135,27 @@ def main():
     print(f"📅 اليوم: {day_name}")
 
     # ======== 🔧 وضع التجربة ========
-    TEST_MODE = True  # ← اجعلها False عندما تريد النشر الفعلي للقنوات
+    TEST_MODE = True
     # ================================
+
     # اختبار إرسال مباشر للأدمن
-    if ADMIN_ID:
+    if ADMIN_ID:  # ← تغير هنا
         print("🧪 اختبار: جاري إرسال رسالة اختبار للأدمن...")
         test_msg = "✅ <b>اختبار RSS</b>\n\nإذا وصلتك هذه الرسالة، فالإعدادات صحيحة."
-        ok = send_telegram_message(ADMIN_CHAT_ID, test_msg)
+        ok = send_telegram_message(ADMIN_ID, test_msg)  # ← تغير هنا
         if ok:
             print("✅ وصلت رسالة الاختبار للأدمن.")
         else:
             print("❌ فشل إرسال رسالة الاختبار للأدمن.")
     else:
-        print("⚠️ ADMIN_CHAT_ID غير معين – لا يمكن إرسال الاختبار.")
+        print("⚠️ ADMIN_ID غير معين – لا يمكن إرسال الاختبار.")
+
     sources = get_today_sources()
 
     if not sources:
-        # لا توجد مصادر → إشعار للأدمن فوراً
         msg = f"اليوم ({day_name}) لا توجد له مصادر RSS مخصصة.\nلم يتم نشر أي مقال."
         print(f"ℹ️ {msg}")
-        notify_admin(msg, is_error=False)  # ← تم تعديل هذا السطر
+        notify_admin(msg, is_error=False)
         sys.exit(0)
 
     try:
@@ -168,14 +166,12 @@ def main():
         article_msg = format_article_message(title, link, summary, test_mode=TEST_MODE)
 
         if TEST_MODE:
-            # إرسال للأدمن فقط
             print("🧪 وضع التجربة: إرسال إلى الأدمن فقط")
             if send_to_admin(article_msg):
                 print("✅ تم إرسال المقال إلى الأدمن للتجربة")
             else:
                 raise Exception("فشل إرسال المقال إلى الأدمن")
         else:
-            # إرسال للقنوات (عند الإنتاج)
             sent = broadcast(article_msg)
             print(f"✅ أُرسل المقال إلى {sent} قناة")
             if sent == 0:

@@ -52,7 +52,7 @@ def send_telegram_message(chat_id, text):
         "chat_id": chat_id,
         "text": text,
         "parse_mode": "HTML",
-        "disable_web_page_preview": False  # نسمح بمعاينة الرابط للتجربة
+        "disable_web_page_preview": False
     }
     try:
         r = requests.post(url, json=payload)
@@ -81,10 +81,13 @@ def send_to_admin(text):
         return False
     return send_telegram_message(ADMIN_CHAT_ID, text)
 
-def notify_admin(msg):
-    """إرسال إشعار خطأ للأدمن"""
+def notify_admin(msg, is_error=True):
+    """إرسال إشعار للأدمن"""
     if ADMIN_CHAT_ID:
-        full_msg = f"📡 <b>تنبيه RSS</b>\n\n{msg}"
+        if is_error:
+            full_msg = f"📡 <b>تنبيه RSS</b>\n\n{msg}"
+        else:
+            full_msg = f"ℹ️ <b>معلومة RSS</b>\n\n{msg}"
         send_telegram_message(ADMIN_CHAT_ID, full_msg)
 
 def fetch_article_from_sources(sources):
@@ -141,9 +144,10 @@ def main():
     sources = get_today_sources()
 
     if not sources:
+        # لا توجد مصادر → إشعار للأدمن فوراً
         msg = f"اليوم ({day_name}) لا توجد له مصادر RSS مخصصة.\nلم يتم نشر أي مقال."
         print(f"ℹ️ {msg}")
-        notify_admin(msg)
+        notify_admin(msg, is_error=False)  # ← تم تعديل هذا السطر
         sys.exit(0)
 
     try:

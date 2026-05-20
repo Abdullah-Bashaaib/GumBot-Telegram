@@ -23,20 +23,28 @@ print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# ========== جميع المصادر المتاحة (تُجرب كلها) ==========
+# ========== جميع المصادر المتاحة ==========
 ALL_SOURCES = [
-    "https://www.alukah.net/rss/articles/",        # شبكة الألوكة
-    "https://munajjid.com/feed",                   # موقع الشيخ المنجد
-    "https://feeds.feedburner.com/IslamwayAr",     # طريق الإسلام
-    "https://www.islamweb.net/ar/rss/articles/",    # إسلام ويب
+    "https://www.islamweb.net/ar/rss.php?id=articles",   # إسلام ويب
+    "https://islamqa.info/ar/rss",                       # الإسلام سؤال وجواب
+    "https://www.alukah.net/rss/sharia/",                # شبكة الألوكة - الشريعة
+    "https://ar.islamway.net/rss",                       # طريق الإسلام
 ]
+
+# ========== المصادر الأساسية حسب اليوم ==========
+RSS_SCHEDULE = {
+    0: "https://www.islamweb.net/ar/rss.php?id=articles",   # الاثنين - إسلام ويب
+    2: "https://www.alukah.net/rss/sharia/",                # الأربعاء - الألوكة
+    4: "https://ar.islamway.net/rss",                       # الجمعة - طريق الإسلام
+    5: "https://islamqa.info/ar/rss",                       # السبت - IslamQA
+}
 
 # ========== أسماء المصادر ==========
 SOURCE_NAMES = {
-    "alukah.net": "شبكة الألوكة",
-    "munajjid.com": "موقع الشيخ المنجد",
-    "Islamway": "طريق الإسلام",
     "islamweb": "إسلام ويب",
+    "islamqa": "الإسلام سؤال وجواب",
+    "alukah.net": "شبكة الألوكة",
+    "islamway": "طريق الإسلام",
 }
 
 def get_source_name(url):
@@ -44,14 +52,6 @@ def get_source_name(url):
         if key in url:
             return name
     return url
-
-# ========== المصادر الأساسية حسب اليوم (اختياري) ==========
-RSS_SCHEDULE = {
-    0: "https://www.alukah.net/rss/articles/",       # الاثنين
-    2: "https://www.alukah.net/rss/articles/",       # الأربعاء
-    4: "https://www.alukah.net/rss/articles/",       # الجمعة
-    5: "https://munajjid.com/feed",                  # السبت
-}
 
 # ========== أسماء أيام الأسبوع ==========
 WEEKDAYS_AR = {
@@ -132,7 +132,6 @@ def notify_admin(msg, is_error=True):
         send_telegram_message(ADMIN_ID, full_msg)
 
 def fetch_single_feed(url):
-    """جلب مقال من مصدر واحد"""
     source_name = get_source_name(url)
     print(f"📡 محاولة: {source_name} ({url})")
     try:
@@ -186,7 +185,7 @@ def main():
 
     TEST_MODE = True
 
-    # رسالة اختبار للأدمن
+    # اختبار سريع
     if ADMIN_ID:
         print("🧪 اختبار: جاري إرسال رسالة اختبار للأدمن...")
         test_msg = "✅ <b>اختبار RSS</b>\n\nإذا وصلتك هذه الرسالة، فالإعدادات صحيحة."
@@ -196,23 +195,17 @@ def main():
             print("✅ وصلت رسالة الاختبار للأدمن.")
         else:
             print("❌ فشل إرسال رسالة الاختبار للأدمن.")
-    else:
-        print("⚠️ ADMIN_ID غير معين – لا يمكن إرسال الاختبار.")
 
-    # --- بناء قائمة المصادر للتجربة ---
+    # بناء قائمة المصادر
     sources_to_try = []
-
-    # 1. المصدر الأساسي لليوم (إن وجد)
     primary = RSS_SCHEDULE.get(today)
     if primary:
         sources_to_try.append(primary)
-
-    # 2. باقي المصادر (بدون تكرار)
     for src in ALL_SOURCES:
         if src not in sources_to_try:
             sources_to_try.append(src)
 
-    # 3. نحاول كل المصادر حتى نجد مقالاً
+    # البحث عن مقال
     title = link = summary = pub_date = None
     final_source_name = ""
 
@@ -224,11 +217,10 @@ def main():
             break
 
     if not title:
-        # جميع المصادر فشلت
         msg = f"جميع المصادر فشلت في يوم {day_name}.\nلم يتم نشر أي مقال."
         print(f"❌ {msg}")
         notify_admin(msg)
-        sys.exit(0)  # خروج بدون خطأ برمجي (حتى لا يفشل workflow)
+        sys.exit(0)
 
     # إشعار الأدمن
     admin_info = format_admin_info(final_source_name, pub_date)

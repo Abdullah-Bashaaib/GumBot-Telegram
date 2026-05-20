@@ -12,7 +12,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_IDS_RAW = os.environ.get("CHANNEL_IDS")
 ADMIN_ID = os.environ.get("ADMIN_ID")
 
-# 🎯 معرف الملصق الثابت
 STICKER_FILE_ID = "CAACAgQAAxkBAAFJ0dFqCNqgqqCjECNmTxnrb4BkgfqbQgACOQ4AAmzbwVJxfz2bNDpn8TsE"
 
 if not BOT_TOKEN or not CHANNEL_IDS_RAW:
@@ -24,21 +23,20 @@ print(f"📡 القنوات المستهدفة: {CHANNEL_LIST}")
 
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
-# ========== المصدر الاحتياطي العام ==========
-FALLBACK_SOURCE = "https://www.alukah.net/rss/articles/"
-
-# ========== المصادر الأساسية حسب اليوم ==========
-RSS_SCHEDULE = {
-    0: "https://www.alukah.net/rss/articles/",       # الاثنين - الألوكة
-    2: "https://www.alukah.net/rss/articles/",       # الأربعاء - الألوكة
-    4: "https://www.alukah.net/rss/articles/",       # الجمعة - الألوكة
-    5: "https://munajjid.com/feed",                  # السبت - المنجد
-}
+# ========== جميع المصادر المتاحة (تُجرب كلها) ==========
+ALL_SOURCES = [
+    "https://www.alukah.net/rss/articles/",        # شبكة الألوكة
+    "https://munajjid.com/feed",                   # موقع الشيخ المنجد
+    "https://feeds.feedburner.com/IslamwayAr",     # طريق الإسلام
+    "https://www.islamweb.net/ar/rss/articles/",    # إسلام ويب
+]
 
 # ========== أسماء المصادر ==========
 SOURCE_NAMES = {
     "alukah.net": "شبكة الألوكة",
     "munajjid.com": "موقع الشيخ المنجد",
+    "Islamway": "طريق الإسلام",
+    "islamweb": "إسلام ويب",
 }
 
 def get_source_name(url):
@@ -46,6 +44,14 @@ def get_source_name(url):
         if key in url:
             return name
     return url
+
+# ========== المصادر الأساسية حسب اليوم (اختياري) ==========
+RSS_SCHEDULE = {
+    0: "https://www.alukah.net/rss/articles/",       # الاثنين
+    2: "https://www.alukah.net/rss/articles/",       # الأربعاء
+    4: "https://www.alukah.net/rss/articles/",       # الجمعة
+    5: "https://munajjid.com/feed",                  # السبت
+}
 
 # ========== أسماء أيام الأسبوع ==========
 WEEKDAYS_AR = {
@@ -126,36 +132,33 @@ def notify_admin(msg, is_error=True):
         send_telegram_message(ADMIN_ID, full_msg)
 
 def fetch_single_feed(url):
-    """جلب مقال من مصدر واحد - ترجع دائماً 4 قيم"""
+    """جلب مقال من مصدر واحد"""
     source_name = get_source_name(url)
     print(f"📡 محاولة: {source_name} ({url})")
     try:
         feed = feedparser.parse(url)
         if not feed.entries:
             print(f"   ⚠️ لا توجد مقالات")
-            return None, None, None, None  # ← 4 قيم
-
+            return None, None, None, None
         entry = feed.entries[0]
         title = entry.get("title", "").strip()
         link = entry.get("link", "")
         summary = entry.get("summary", "") or entry.get("description", "")
         summary = clean_summary(summary)
 
-        # تاريخ النشر
         pub_date = None
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             pub_date = datetime.datetime(*entry.published_parsed[:6])
 
         if not title:
             print(f"   ⚠️ عنوان فارغ")
-            return None, None, None, None  # ← 4 قيم
+            return None, None, None, None
 
         print(f"   ✅ وجدنا: {title[:50]}...")
         return title, link, summary, pub_date
-
     except Exception as e:
         print(f"   ⚠️ فشل: {e}")
-        return None, None, None, None  # ← 4 قيم
+        return None, None, None, None
 
 def format_article_message(title, link, summary, test_mode=False):
     msg = ""
@@ -181,9 +184,7 @@ def main():
     day_name = WEEKDAYS_AR.get(today, str(today))
     print(f"📅 اليوم: {day_name}")
 
-    # ======== 🔧 وضع التجربة ========
     TEST_MODE = True
-    # ================================
 
     # رسالة اختبار للأدمن
     if ADMIN_ID:
@@ -198,58 +199,57 @@ def main():
     else:
         print("⚠️ ADMIN_ID غير معين – لا يمكن إرسال الاختبار.")
 
-    # تحديد المصادر
-    primary_source = RSS_SCHEDULE.get(today)
-    
-    if not primary_source:
-        msg = f"اليوم ({day_name}) لا توجد له مصادر RSS مخصصة.\nلم يتم نشر أي مقال."
-        print(f"ℹ️ {msg}")
-        notify_admin(msg, is_error=False)
-        sys.exit(0)
+    # --- بناء قائمة المصادر للتجربة ---
+    sources_to_try = []
 
-    try:
-        # محاولة المصدر الأساسي
-        title, link, summary, pub_date = fetch_single_feed(primary_source)
-        source_name = get_source_name(primary_source)
-        used_fallback = False
+    # 1. المصدر الأساسي لليوم (إن وجد)
+    primary = RSS_SCHEDULE.get(today)
+    if primary:
+        sources_to_try.append(primary)
 
-        # إذا فشل، نجرب الاحتياطي
-        if not title:
-            print(f"⚠️ فشل المصدر الأساسي، نجرب الاحتياطي...")
-            title, link, summary, pub_date = fetch_single_feed(FALLBACK_SOURCE)
-            source_name = get_source_name(FALLBACK_SOURCE)
-            used_fallback = True
+    # 2. باقي المصادر (بدون تكرار)
+    for src in ALL_SOURCES:
+        if src not in sources_to_try:
+            sources_to_try.append(src)
 
-        if not title:
-            raise Exception(f"فشل جلب المقال من المصدر الأساسي والاحتياطي")
+    # 3. نحاول كل المصادر حتى نجد مقالاً
+    title = link = summary = pub_date = None
+    final_source_name = ""
 
-        # إشعار الأدمن
-        admin_info = format_admin_info(source_name, pub_date)
-        if used_fallback:
-            admin_info += "\n⚠️ تم استخدام المصدر الاحتياطي (الألوكة)."
-        notify_admin(admin_info, is_error=False)
+    for src in sources_to_try:
+        t, l, s, p = fetch_single_feed(src)
+        if t:
+            title, link, summary, pub_date = t, l, s, p
+            final_source_name = get_source_name(src)
+            break
 
-        # مقال القناة
-        article_msg = format_article_message(title, link, summary, test_mode=TEST_MODE)
+    if not title:
+        # جميع المصادر فشلت
+        msg = f"جميع المصادر فشلت في يوم {day_name}.\nلم يتم نشر أي مقال."
+        print(f"❌ {msg}")
+        notify_admin(msg)
+        sys.exit(0)  # خروج بدون خطأ برمجي (حتى لا يفشل workflow)
 
-        if TEST_MODE:
-            print("🧪 وضع التجربة: إرسال إلى الأدمن فقط")
-            full_msg = f"{admin_info}\n\n{article_msg}"
-            if send_to_admin_article(full_msg):
-                print("✅ تم إرسال المقال + الملصق إلى الأدمن للتجربة")
-            else:
-                raise Exception("فشل إرسال المقال إلى الأدمن")
+    # إشعار الأدمن
+    admin_info = format_admin_info(final_source_name, pub_date)
+    if primary and final_source_name != get_source_name(primary):
+        admin_info += "\n⚠️ تم استخدام مصدر احتياطي."
+    notify_admin(admin_info, is_error=False)
+
+    article_msg = format_article_message(title, link, summary, test_mode=TEST_MODE)
+
+    if TEST_MODE:
+        print("🧪 وضع التجربة: إرسال إلى الأدمن فقط")
+        full_msg = f"{admin_info}\n\n{article_msg}"
+        if send_to_admin_article(full_msg):
+            print("✅ تم إرسال المقال + الملصق إلى الأدمن للتجربة")
         else:
-            sent = broadcast_article(article_msg)
-            print(f"✅ أُرسل المقال + الملصق إلى {sent} قناة")
-            if sent == 0:
-                raise Exception("لم يتم الإرسال لأي قناة")
-
-    except Exception as e:
-        err = str(e)
-        print(f"❌ خطأ: {err}")
-        notify_admin(f"حدث خطأ أثناء معالجة مقال يوم {day_name}:\n{err}")
-        sys.exit(1)
+            notify_admin("فشل إرسال المقال التجريبي للأدمن.")
+    else:
+        sent = broadcast_article(article_msg)
+        print(f"✅ أُرسل المقال + الملصق إلى {sent} قناة")
+        if sent == 0:
+            notify_admin("لم يتم الإرسال لأي قناة.")
 
 if __name__ == "__main__":
     main()

@@ -30,15 +30,14 @@ FALLBACK_SOURCE = "https://www.alukah.net/rss/articles/"
 # ========== المصادر الأساسية حسب اليوم ==========
 RSS_SCHEDULE = {
     0: "https://www.alukah.net/rss/articles/",       # الاثنين - الألوكة
-    2: "https://feeds.feedburner.com/saaid",         # الأربعاء - صيد الفوائد
-    4: "https://feeds.feedburner.com/saaid",         # الجمعة - صيد الفوائد
+    2: "https://www.alukah.net/rss/articles/",       # الأربعاء - الألوكة
+    4: "https://www.alukah.net/rss/articles/",       # الجمعة - الألوكة
     5: "https://munajjid.com/feed",                  # السبت - المنجد
 }
 
 # ========== أسماء المصادر ==========
 SOURCE_NAMES = {
     "alukah.net": "شبكة الألوكة",
-    "saaid": "صيد الفوائد",
     "munajjid.com": "موقع الشيخ المنجد",
 }
 
@@ -217,7 +216,7 @@ def main():
         source_name = get_source_name(primary_source)
         used_fallback = False
 
-        # إذا فشل، نجرب الاحتياطي (الألوكة)
+        # إذا فشل، نجرب الاحتياطي (الألوكة دائماً)
         if not title:
             print(f"⚠️ فشل المصدر الأساسي، نجرب الاحتياطي...")
             title, link, summary, pub_date = fetch_single_feed(FALLBACK_SOURCE)

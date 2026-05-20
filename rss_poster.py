@@ -25,18 +25,18 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # ========== جميع المصادر المتاحة ==========
 ALL_SOURCES = [
-    "https://www.islamweb.net/ar/rss.php?id=articles",   # إسلام ويب
-    "https://islamqa.info/ar/rss",                       # الإسلام سؤال وجواب
-    "https://www.alukah.net/rss/sharia/",                # شبكة الألوكة - الشريعة
-    "https://ar.islamway.net/rss",                       # طريق الإسلام
+    "https://www.islamweb.net/ar/rss.php?id=articles",
+    "https://islamqa.info/ar/rss",
+    "https://www.alukah.net/rss/sharia/",
+    "https://ar.islamway.net/rss",
 ]
 
 # ========== المصادر الأساسية حسب اليوم ==========
 RSS_SCHEDULE = {
-    0: "https://www.islamweb.net/ar/rss.php?id=articles",   # الاثنين - إسلام ويب
-    2: "https://www.alukah.net/rss/sharia/",                # الأربعاء - الألوكة
-    4: "https://ar.islamway.net/rss",                       # الجمعة - طريق الإسلام
-    5: "https://islamqa.info/ar/rss",                       # السبت - IslamQA
+    0: "https://www.islamweb.net/ar/rss.php?id=articles",   # الاثنين
+    2: "https://www.alukah.net/rss/sharia/",                # الأربعاء
+    4: "https://ar.islamway.net/rss",                       # الجمعة
+    5: "https://islamqa.info/ar/rss",                       # السبت
 }
 
 # ========== أسماء المصادر ==========
@@ -45,6 +45,21 @@ SOURCE_NAMES = {
     "islamqa": "الإسلام سؤال وجواب",
     "alukah.net": "شبكة الألوكة",
     "islamway": "طريق الإسلام",
+}
+
+# ========== User-Agent قوي يحاكي متصفح Chrome ==========
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "ar,en-US;q=0.7,en;q=0.3",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Cache-Control": "max-age=0",
 }
 
 def get_source_name(url):
@@ -91,10 +106,7 @@ def send_telegram_message(chat_id, text):
 
 def send_telegram_sticker(chat_id):
     url = f"{TELEGRAM_API}/sendSticker"
-    payload = {
-        "chat_id": chat_id,
-        "sticker": STICKER_FILE_ID
-    }
+    payload = {"chat_id": chat_id, "sticker": STICKER_FILE_ID}
     try:
         r = requests.post(url, json=payload)
         if r.status_code == 200:
@@ -132,13 +144,21 @@ def notify_admin(msg, is_error=True):
         send_telegram_message(ADMIN_ID, full_msg)
 
 def fetch_single_feed(url):
+    """جلب مقال من مصدر واحد مع تمويه كمتصفح"""
     source_name = get_source_name(url)
     print(f"📡 محاولة: {source_name} ({url})")
     try:
-        feed = feedparser.parse(url)
+        # 1. نجلب محتوى الرابط بأنفسنا مع Header
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+
+        # 2. نغذي المحتوى لـ feedparser يدويًا
+        feed = feedparser.parse(resp.text)
+
         if not feed.entries:
-            print(f"   ⚠️ لا توجد مقالات")
+            print(f"   ⚠️ لا توجد مقالات (تم الجلب لكن دون مقالات)")
             return None, None, None, None
+
         entry = feed.entries[0]
         title = entry.get("title", "").strip()
         link = entry.get("link", "")
@@ -155,6 +175,7 @@ def fetch_single_feed(url):
 
         print(f"   ✅ وجدنا: {title[:50]}...")
         return title, link, summary, pub_date
+
     except Exception as e:
         print(f"   ⚠️ فشل: {e}")
         return None, None, None, None
@@ -185,7 +206,6 @@ def main():
 
     TEST_MODE = True
 
-    # اختبار سريع
     if ADMIN_ID:
         print("🧪 اختبار: جاري إرسال رسالة اختبار للأدمن...")
         test_msg = "✅ <b>اختبار RSS</b>\n\nإذا وصلتك هذه الرسالة، فالإعدادات صحيحة."
@@ -196,7 +216,6 @@ def main():
         else:
             print("❌ فشل إرسال رسالة الاختبار للأدمن.")
 
-    # بناء قائمة المصادر
     sources_to_try = []
     primary = RSS_SCHEDULE.get(today)
     if primary:
@@ -205,7 +224,6 @@ def main():
         if src not in sources_to_try:
             sources_to_try.append(src)
 
-    # البحث عن مقال
     title = link = summary = pub_date = None
     final_source_name = ""
 
@@ -222,7 +240,6 @@ def main():
         notify_admin(msg)
         sys.exit(0)
 
-    # إشعار الأدمن
     admin_info = format_admin_info(final_source_name, pub_date)
     if primary and final_source_name != get_source_name(primary):
         admin_info += "\n⚠️ تم استخدام مصدر احتياطي."

@@ -102,7 +102,6 @@ def send_telegram_sticker(chat_id):
         return False
 
 def broadcast_article(text):
-    """إرسال المقال + الملصق لجميع القنوات"""
     success = 0
     for ch in CHANNEL_LIST:
         if send_telegram_message(ch, text):
@@ -111,7 +110,6 @@ def broadcast_article(text):
     return success
 
 def send_to_admin_article(text):
-    """إرسال المقال + الملصق للأدمن فقط"""
     if not ADMIN_ID:
         return False
     if send_telegram_message(ADMIN_ID, text):
@@ -120,7 +118,6 @@ def send_to_admin_article(text):
     return False
 
 def notify_admin(msg, is_error=True):
-    """إشعار للأدمن (بدون ملصق)"""
     if ADMIN_ID:
         if is_error:
             full_msg = f"📡 <b>تنبيه RSS</b>\n\n{msg}"
@@ -129,37 +126,38 @@ def notify_admin(msg, is_error=True):
         send_telegram_message(ADMIN_ID, full_msg)
 
 def fetch_single_feed(url):
-    """جلب مقال من مصدر واحد"""
+    """جلب مقال من مصدر واحد - ترجع دائماً 4 قيم"""
     source_name = get_source_name(url)
     print(f"📡 محاولة: {source_name} ({url})")
     try:
         feed = feedparser.parse(url)
         if not feed.entries:
             print(f"   ⚠️ لا توجد مقالات")
-            return None, None, None
+            return None, None, None, None  # ← 4 قيم
+
         entry = feed.entries[0]
         title = entry.get("title", "").strip()
         link = entry.get("link", "")
         summary = entry.get("summary", "") or entry.get("description", "")
         summary = clean_summary(summary)
 
-        # تاريخ النشر إن وجد
+        # تاريخ النشر
         pub_date = None
         if hasattr(entry, "published_parsed") and entry.published_parsed:
             pub_date = datetime.datetime(*entry.published_parsed[:6])
 
         if not title:
             print(f"   ⚠️ عنوان فارغ")
-            return None, None, None
+            return None, None, None, None  # ← 4 قيم
 
         print(f"   ✅ وجدنا: {title[:50]}...")
         return title, link, summary, pub_date
+
     except Exception as e:
         print(f"   ⚠️ فشل: {e}")
-        return None, None, None, None
+        return None, None, None, None  # ← 4 قيم
 
 def format_article_message(title, link, summary, test_mode=False):
-    """تنسيق المقال للقناة (بدون اسم المصدر ولا التاريخ)"""
     msg = ""
     if test_mode:
         msg += "🧪 <b>[رسالة تجربة - للأدمن فقط]</b>\n\n"
@@ -171,7 +169,6 @@ def format_article_message(title, link, summary, test_mode=False):
     return msg
 
 def format_admin_info(source_name, pub_date):
-    """معلومات إضافية للأدمن فقط"""
     info = f"📡 <b>المصدر:</b> {html.escape(source_name)}"
     if pub_date:
         date_str = pub_date.strftime("%Y-%m-%d %H:%M")
@@ -201,7 +198,7 @@ def main():
     else:
         print("⚠️ ADMIN_ID غير معين – لا يمكن إرسال الاختبار.")
 
-    # تحديد المصدر الأساسي لليوم
+    # تحديد المصادر
     primary_source = RSS_SCHEDULE.get(today)
     
     if not primary_source:
@@ -216,7 +213,7 @@ def main():
         source_name = get_source_name(primary_source)
         used_fallback = False
 
-        # إذا فشل، نجرب الاحتياطي (الألوكة دائماً)
+        # إذا فشل، نجرب الاحتياطي
         if not title:
             print(f"⚠️ فشل المصدر الأساسي، نجرب الاحتياطي...")
             title, link, summary, pub_date = fetch_single_feed(FALLBACK_SOURCE)
@@ -226,25 +223,23 @@ def main():
         if not title:
             raise Exception(f"فشل جلب المقال من المصدر الأساسي والاحتياطي")
 
-        # إشعار الأدمن بمعلومات المصدر
+        # إشعار الأدمن
         admin_info = format_admin_info(source_name, pub_date)
         if used_fallback:
             admin_info += "\n⚠️ تم استخدام المصدر الاحتياطي (الألوكة)."
         notify_admin(admin_info, is_error=False)
 
-        # المقال للقناة (بدون اسم المصدر)
+        # مقال القناة
         article_msg = format_article_message(title, link, summary, test_mode=TEST_MODE)
 
         if TEST_MODE:
             print("🧪 وضع التجربة: إرسال إلى الأدمن فقط")
-            # نرسل للأدمن المقالة + معلومات المصدر
             full_msg = f"{admin_info}\n\n{article_msg}"
             if send_to_admin_article(full_msg):
                 print("✅ تم إرسال المقال + الملصق إلى الأدمن للتجربة")
             else:
                 raise Exception("فشل إرسال المقال إلى الأدمن")
         else:
-            # إرسال للقنوات (المقال فقط بدون معلومات المصدر)
             sent = broadcast_article(article_msg)
             print(f"✅ أُرسل المقال + الملصق إلى {sent} قناة")
             if sent == 0:

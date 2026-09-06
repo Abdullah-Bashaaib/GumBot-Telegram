@@ -1,9 +1,9 @@
 name: Daily Telegram Bot Post
 
 on:
-  schedule:
+  #schedule:
     # يعمل يومياً الساعة 8:00 صباحاً بتوقيت UTC
-    - cron: '0 8 * * *'
+  #  - cron: '0 8 * * *'
   workflow_dispatch: # هذا السطر يسمح لك بتشغيل السكربت يدوياً من GitHub للتجربة
 
 jobs:

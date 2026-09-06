@@ -1,10 +1,10 @@
 import os
-import requests
 import html
 import time
 import feedparser
 from bs4 import BeautifulSoup
 from datetime import datetime
+from curl_cffi import requests # نستخدم المكتبة المتنكرة هنا
 
 RSS_URL = 'https://revel77.substack.com/feed'
 
@@ -24,16 +24,16 @@ def send_telegram_message(text):
         print(f"حدث خطأ أثناء النشر في تليجرام: {response.text}")
 
 def main():
-    print("بدء تشغيل السكربت عبر تقنية RSS لتجاوز الحماية...")
+    print("بدء تشغيل السكربت بخدعة RSS + curl_cffi لتجاوز الحماية القصوى...")
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-    
-    # 1. تحميل التغذية يدوياً عبر requests للتمويه
+    # 1. تحميل التغذية باستخدام التخفي كمتصفح كروم
     print("جاري تحميل ملف الـ RSS...")
-    response = requests.get(RSS_URL, headers=headers)
-    print(f"كود الاستجابة لملف التغذية: {response.status_code}")
+    try:
+        response = requests.get(RSS_URL, impersonate="chrome")
+        print(f"كود الاستجابة لملف التغذية: {response.status_code}")
+    except Exception as e:
+        print(f"حدث خطأ أثناء الاتصال: {e}")
+        return
     
     if response.status_code != 200:
         print(f"فشل الاتصال! تم رفض الطلب.")
@@ -44,8 +44,6 @@ def main():
     
     if not feed.entries:
         print("الاتصال نجح، لكن لم يتم العثور على أي مقالات في التغذية!")
-        print("أول 200 حرف من الرد للتشخيص:")
-        print(response.text[:200])
         return
 
     latest_post = feed.entries[0]

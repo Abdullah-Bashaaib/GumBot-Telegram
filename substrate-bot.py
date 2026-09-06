@@ -1,13 +1,12 @@
 import os
-import requests
 import html
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+from curl_cffi import requests # استخدام المكتبة الجديدة المتنكرة
 
 API_BASE_URL = 'https://revel77.substack.com/api/v1/posts'
 
-# استخدام المسميات التي طلبتها
 TELEGRAM_TOKEN = os.environ.get('BOT_TOKEN')
 CHAT_ID = os.environ.get('CHANNEL_IDS')
 
@@ -17,23 +16,22 @@ def send_telegram_message(text):
         "chat_id": CHAT_ID,
         "text": text,
         "parse_mode": "HTML",
-        "disable_web_page_preview": True # إيقاف المعاينة حتى لا تشتت الانتباه عن النص
+        "disable_web_page_preview": True
     }
+    # إرسال الرسالة إلى تليجرام
     response = requests.post(url, json=payload)
     if response.status_code != 200:
         print(f"حدث خطأ أثناء النشر في تليجرام: {response.text}")
 
 def main():
-    print("بدء تشغيل السكربت...")
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    }
-
-    # 1. جلب قائمة المقالات لمعرفة أحدث مقال
+    print("بدء تشغيل السكربت بتخطي الحماية...")
+    
+    # 1. جلب قائمة المقالات
     url = f"{API_BASE_URL}?limit=1"
     print(f"جاري الاتصال بـ: {url}")
     
-    response = requests.get(url, headers=headers)
+    # التنكر كمتصفح كروم لتخطي Cloudflare
+    response = requests.get(url, impersonate="chrome")
     print(f"كود الاستجابة من Substack: {response.status_code}")
     
     if response.status_code != 200:
@@ -64,9 +62,9 @@ def main():
     link = latest_post.get("canonical_url")
     print(f"تم العثور على مقال جديد: {title}")
 
-    # 3. جلب محتوى المقال الكامل باستخدام الـ Slug
+    # 3. جلب محتوى المقال الكامل
     print("جاري جلب النص الكامل للمقال...")
-    detailed_response = requests.get(f"{API_BASE_URL}/{slug}", headers=headers)
+    detailed_response = requests.get(f"{API_BASE_URL}/{slug}", impersonate="chrome")
     
     if detailed_response.status_code != 200:
         print(f"فشل في جلب النص الكامل. كود الخطأ: {detailed_response.status_code}")
@@ -75,37 +73,30 @@ def main():
     detailed_post = detailed_response.json()
     body_html = detailed_post.get("body_html", "")
 
-    # 4. تنظيف النص من أكواد HTML وتنسيقه
+    # 4. تنظيف النص
     print("جاري تنظيف النص وتجهيز الرسالة...")
     soup = BeautifulSoup(body_html, "html.parser")
-    # استخراج النص مع وضع مسافات بين الفقرات
     raw_text = soup.get_text(separator='\n\n').strip()
-
-    # حماية علامات مثل < و > حتى لا تعطل تنسيق HTML في تليجرام
     safe_text = html.escape(raw_text) 
 
     # 5. تجهيز الرسالة
     full_message = f"📰 <b>{html.escape(title)}</b>\n\n{safe_text}\n\n🔗 <a href='{link}'>الرابط الأصلي</a>"
 
-    # 6. تقسيم الرسالة إذا تجاوزت حد تليجرام (4096 حرفاً)
+    # 6. النشر مع التقسيم
     max_length = 4000 
 
     if len(full_message) <= max_length:
         send_telegram_message(full_message)
         print("تم نشر المقال كاملاً في رسالة واحدة!")
     else:
-        # تقسيم النص إلى أجزاء
         parts = [full_message[i:i+max_length] for i in range(0, len(full_message), max_length)]
         for index, part in enumerate(parts):
-            # إضافة توضيح إذا كانت الرسالة مقسمة
             if index == 0:
                 send_telegram_message(part + "\n\n<i>[يتبع...]</i>")
             elif index == len(parts) - 1:
                 send_telegram_message(part)
             else:
                 send_telegram_message(part + "\n\n<i>[يتبع...]</i>")
-
-            # الانتظار لثانية لتجنب حظر تليجرام بسبب سرعة الإرسال (Flood Control)
             time.sleep(1) 
 
         print(f"تم نشر المقال كاملاً ومقسماً على {len(parts)} رسائل!")

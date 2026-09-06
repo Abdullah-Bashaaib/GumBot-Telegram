@@ -10,6 +10,7 @@ RSS_URL = 'https://revel77.substack.com/feed'
 # رابط الخدمة الوسيطة التي ستجلب البيانات نيابة عنا لتخطي الحظر
 PROXY_API_URL = f"https://api.rss2json.com/v1/api.json?rss_url={RSS_URL}"
 
+# تم اعتماد المسميات التي أرسلتها أنت
 TELEGRAM_TOKEN = os.environ.get('BOT_TOKEN')
 CHAT_ID = os.environ.get('CHANNEL_IDS')
 
@@ -50,9 +51,8 @@ def main():
     latest_post = items[0]
 
     # 2. التحقق من تاريخ النشر
-    # الوسيط يعيد التاريخ بصيغة "YYYY-MM-DD HH:MM:SS"
     pub_date_str = latest_post.get('pubDate', '')
-    post_date = pub_date_str[:10] # نأخذ أول 10 حروف (YYYY-MM-DD)
+    post_date = pub_date_str[:10]
     today_date = datetime.utcnow().strftime("%Y-%m-%d")
     
     print(f"تاريخ أحدث مقال: {post_date}")

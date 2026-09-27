@@ -8,6 +8,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from google import genai
 import arabic_reshaper
 from bidi.algorithm import get_display
+import time
+
 
 # 1. قراءة المفاتيح بأمان من متغيرات البيئة
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN_GUMCE")
@@ -56,20 +58,32 @@ async def send_join_prompt(update: Update):
 
 # 2. دالة الترجمة عبر Gemini
 # 2. دالة الترجمة عبر Gemini 3.8 Flash
-def translate_text(text: str) -> str:
+
+def translate_text(text: str, max_retries: int = 3) -> str:
     if not text.strip():
         return ""
+        
     prompt = (
         "Translate the following academic content into clear, accurate Arabic. "
         "Keep technical terms, formulas, code snippets, and symbols intact. "
         "Only output the translation:\n\n" + text
     )
-    response = client.models.generate_content(
-        model='gemini-3.8-flash',
-        contents=prompt
-    )
-    return response.text.strip()
-
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-1.5-flash', # موديل سريع وأكثر استقراراً في فترات الذروة
+                contents=prompt
+            )
+            return response.text.strip()
+            
+        except Exception as e:
+            if "503" in str(e) and attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 3 # انتظار 3 ثوانٍ ثم 6 ثوانٍ
+                print(f"خوادم الموديل تحت الضغط (503)، جاري الانتظار {wait_time} ثوانٍ وإعادة المحاولة...")
+                time.sleep(wait_time)
+            else:
+                raise e
 def fix_arabic(text: str) -> str:
     reshaped_text = arabic_reshaper.reshape(text)
     return get_display(reshaped_text)

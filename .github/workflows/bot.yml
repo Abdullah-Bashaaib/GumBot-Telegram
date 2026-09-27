@@ -25,7 +25,7 @@ jobs:
       - name: Run Bot
         env:
           PYTHONUNBUFFERED: "1"
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_GUMCE }}
+          TELEGRAM_BOT_TOKEN_GUMCE: ${{ secrets.TELEGRAM_BOT_TOKEN_GUMCE }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CHANNEL_USERNAME: ${{ secrets.CHANNEL_USERNAME }}
         run: |

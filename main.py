@@ -1,7 +1,7 @@
 import os
 import shutil
 import asyncio
-import fitz  # PyMuPDF
+import pymupdf as fitz
 from pptx import Presentation
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -9,12 +9,22 @@ from google import genai
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-# 1. الإعدادات والمفاتيح
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN_GUMCE", "ضع_توكن_بوت_تليجرام_هنا")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "ضع_مفتاح_GEMINI_API_هنا")
+# 1. قراءة المفاتيح بأمان من متغيرات البيئة
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN_GUMCE")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME")
 
-# ضع هنا معرف قناتك أو رابطها (مثال: @frfshh_98)
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "@frfshh_98") 
+# التحقق الصارم من وجود المتغيرات
+missing_vars = []
+if not TELEGRAM_BOT_TOKEN:
+    missing_vars.append("TELEGRAM_BOT_TOKEN_GUMCE")
+if not GEMINI_API_KEY:
+    missing_vars.append("GEMINI_API_KEY")
+if not CHANNEL_USERNAME:
+    missing_vars.append("CHANNEL_USERNAME")
+
+if missing_vars:
+    raise ValueError(f"⚠️ خطأ: المتغيرات التالية مفقودة في إعدادات GitHub Secrets: {', '.join(missing_vars)}")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -22,16 +32,14 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 async def is_subscribed(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
-        # السماح للمشرفين، المالك، والأعضاء
         if member.status in ['creator', 'administrator', 'member']:
             return True
         return False
     except Exception as e:
         print(f"خطأ أثناء فحص الاشتراك (تأكد من رفع البوت مشرفاً في القناة): {e}")
-        # في حال حدوث خطأ بالسيرفر أو المعرف، نسمح له بالمرور حتى لا يتعطل البوت تماماً
         return True
 
-# رسالة إجبار الاشتراك مع زر شفاف للدخول إلى القناة
+# رسالة إجبار الاشتراك
 async def send_join_prompt(update: Update):
     clean_username = CHANNEL_USERNAME.replace("@", "")
     keyboard = [
@@ -46,7 +54,7 @@ async def send_join_prompt(update: Update):
     )
     await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
-# 2. دالة الترجمة باستخدام Gemini
+# 2. دالة الترجمة عبر Gemini
 def translate_text(text: str) -> str:
     if not text.strip():
         return ""
@@ -61,12 +69,11 @@ def translate_text(text: str) -> str:
     )
     return response.text.strip()
 
-# ضبط اتجاه وتشكيل النص العربي للـ PDF
 def fix_arabic(text: str) -> str:
     reshaped_text = arabic_reshaper.reshape(text)
     return get_display(reshaped_text)
 
-# 3. معالجة وتوليد ملف PDF المزدوج
+# 3. معالجة وتوليد PDF المزدوج
 def process_pdf(input_path: str, output_path: str):
     doc = fitz.open(input_path)
     new_doc = fitz.open()
@@ -87,14 +94,14 @@ def process_pdf(input_path: str, output_path: str):
                 text_rect,
                 formatted_text,
                 fontsize=11,
-                align=2 # محاذاة لليمين
+                align=2
             )
 
     new_doc.save(output_path)
     new_doc.close()
     doc.close()
 
-# 4. معالجة وتوليد ملف PPTX المزدوج
+# 4. معالجة وتوليد PPTX المزدوج
 def process_pptx(input_path: str, output_path: str):
     prs = Presentation(input_path)
     blank_layout = prs.slide_layouts[6]
@@ -121,7 +128,6 @@ def process_pptx(input_path: str, output_path: str):
 
 # 5. معالجات التليجرام
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # فحص الاشتراك الإجباري عند إرسال /start
     user_id = update.effective_user.id
     if not await is_subscribed(user_id, context):
         await send_join_prompt(update)
@@ -134,7 +140,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # فحص الاشتراك الإجباري قبل بدء معالجة الملف
     if not await is_subscribed(user_id, context):
         await send_join_prompt(update)
         return

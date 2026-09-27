@@ -58,7 +58,6 @@ async def send_join_prompt(update: Update):
 
 # 2. دالة الترجمة عبر Gemini
 # 2. دالة الترجمة عبر Gemini 3.8 Flash
-
 def translate_text(text: str, max_retries: int = 3) -> str:
     if not text.strip():
         return ""
@@ -69,24 +68,35 @@ def translate_text(text: str, max_retries: int = 3) -> str:
         "Only output the translation:\n\n" + text
     )
     
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model='gemini-1.5-flash', # موديل سريع وأكثر استقراراً في فترات الذروة
-                contents=prompt
-            )
-            return response.text.strip()
-            
-        except Exception as e:
-            if "503" in str(e) and attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 3 # انتظار 3 ثوانٍ ثم 6 ثوانٍ
-                print(f"خوادم الموديل تحت الضغط (503)، جاري الانتظار {wait_time} ثوانٍ وإعادة المحاولة...")
-                time.sleep(wait_time)
-            else:
-                raise e
-def fix_arabic(text: str) -> str:
-    reshaped_text = arabic_reshaper.reshape(text)
-    return get_display(reshaped_text)
+    # قائمة بأسماء الموديلات البديلة في حال كان أحدهما يواجه ضغطاً مؤقتاً
+    candidate_models = ['gemini-2.5-flash', 'gemini-2.0-flash']
+    
+    for model_name in candidate_models:
+        for attempt in range(max_retries):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                return response.text.strip()
+                
+            except Exception as e:
+                err_str = str(e)
+                # إذا واجه ضغط 503 ننتظر ونكرر
+                if "503" in err_str:
+                    wait_time = (attempt + 1) * 3
+                    print(f"ضغط على خادم {model_name} (503)، انتظار {wait_time} ثوانٍ...")
+                    time.sleep(wait_time)
+                # إذا لم يكن الموديل متاحاً (404)، نتخطاه للموديل التالي فوراً
+                elif "404" in err_str:
+                    print(f"الموديل {model_name} غير مدعوم، تجربة الموديل البديل...")
+                    break
+                else:
+                    if attempt == max_retries - 1:
+                        raise e
+                    time.sleep(2)
+                    
+    raise RuntimeError("تعذر الوصول إلى خدمات الترجمة حالياً، يرجى المحاولة لاحقاً.")
 
 # 3. معالجة وتوليد PDF المزدوج
 def process_pdf(input_path: str, output_path: str):

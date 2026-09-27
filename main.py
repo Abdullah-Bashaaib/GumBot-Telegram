@@ -10,7 +10,7 @@ import arabic_reshaper
 from bidi.algorithm import get_display
 
 # 1. الإعدادات والمفاتيح
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ضع_توكن_بوت_تليجرام_هنا")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN_GUMCE", "ضع_توكن_بوت_تليجرام_هنا")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "ضع_مفتاح_GEMINI_API_هنا")
 
 # ضع هنا معرف قناتك أو رابطها (مثال: @frfshh_98)

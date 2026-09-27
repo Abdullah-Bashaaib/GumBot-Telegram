@@ -14,7 +14,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ضع_توكن_بوت_تل�
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "ضع_مفتاح_GEMINI_API_هنا")
 
 # ضع هنا معرف قناتك أو رابطها (مثال: @frfshh_98)
-CHANNEL_USERNAME = "@YourChannel" 
+CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "@frfshh_98") 
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 

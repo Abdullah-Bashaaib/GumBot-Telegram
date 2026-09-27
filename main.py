@@ -55,6 +55,7 @@ async def send_join_prompt(update: Update):
     await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
 
 # 2. دالة الترجمة عبر Gemini
+# 2. دالة الترجمة عبر Gemini 3.8 Flash
 def translate_text(text: str) -> str:
     if not text.strip():
         return ""
@@ -64,7 +65,7 @@ def translate_text(text: str) -> str:
         "Only output the translation:\n\n" + text
     )
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-3.8-flash',
         contents=prompt
     )
     return response.text.strip()

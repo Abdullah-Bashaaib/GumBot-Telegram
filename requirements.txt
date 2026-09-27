@@ -1,7 +1,6 @@
-requests>=2.28.0
-beautifulsoup4>=4.11.0
-
-
-
-feedparser
-curl_cffi
+python-telegram-bot
+PyMuPDF
+python-pptx
+google-genai
+arabic-reshaper
+python-bidi
